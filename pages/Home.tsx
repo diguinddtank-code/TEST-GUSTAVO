@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Heart, MessageCircle, Share2, Calendar, Clock, TrendingUp, MoreVertical, Volume2, VolumeX } from 'lucide-react';
-import { UserProfile, MediaItem, MatchEvent } from '../types';
+import { Heart, MessageCircle, Share2, Calendar, Clock, TrendingUp, MoreVertical, Volume2, VolumeX, Send, X } from 'lucide-react';
+import { UserProfile, MediaItem, MatchEvent, Comment } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, addDoc, getDocs, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 interface HomeProps {
@@ -11,8 +12,139 @@ interface HomeProps {
     onNavigate: (tab: string) => void;
 }
 
-// Sub-component for individual feed items to handle Video Autoplay logic
-const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: string, likes: string[]) => void }> = ({ item, user, onLike }) => {
+// Robust Time Ago Function
+const getTimeAgo = (dateString: string | undefined) => {
+    if (!dateString) return 'Just now';
+    
+    try {
+        const now = new Date();
+        const past = new Date(dateString);
+        
+        // Invalid date check
+        if (isNaN(past.getTime())) return 'Just now';
+
+        const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+
+        if (diffInSeconds < 60) return 'Just now';
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+        if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+        
+        return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(past);
+    } catch (e) {
+        return 'Just now';
+    }
+};
+
+const CommentsSheet: React.FC<{ mediaId: string; user: UserProfile; onClose: () => void }> = ({ mediaId, user, onClose }) => {
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [newComment, setNewComment] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const q = query(collection(db, "comments"), where("mediaId", "==", mediaId), orderBy("createdAt", "asc"));
+        const unsub = onSnapshot(q, (snap) => {
+            const loaded: Comment[] = [];
+            snap.forEach(d => loaded.push({ ...d.data(), id: d.id } as Comment));
+            setComments(loaded);
+            setLoading(false);
+        });
+        return () => unsub();
+    }, [mediaId]);
+
+    const handleSend = async () => {
+        if (!newComment.trim()) return;
+        const text = newComment;
+        setNewComment(''); // Optimistic clear
+
+        try {
+            await addDoc(collection(db, "comments"), {
+                mediaId,
+                userId: user.id,
+                text,
+                createdAt: new Date().toISOString(),
+                authorName: user.fullName,
+                authorAvatar: user.avatarUrl
+            });
+            
+            // Update comment count on media item (Optional: Cloud Function is better for this, but client-side works for MVP)
+            const mediaRef = doc(db, "media", mediaId);
+            // We can't easily increment without knowing current count reliably without a transaction, 
+            // but for UI feedback we rely on the realtime listener of the feed.
+            // A simple updateDoc to trigger a change event:
+             /* await updateDoc(mediaRef, { lastCommentAt: new Date().toISOString() }); */
+        } catch (e) {
+            console.error("Failed to comment", e);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <motion.div 
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                className="bg-slate-50 w-full sm:max-w-md h-[75vh] sm:h-[600px] rounded-t-[32px] sm:rounded-[32px] shadow-2xl relative z-10 flex flex-col overflow-hidden"
+            >
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white">
+                    <h3 className="font-bold text-slate-900">Comments</h3>
+                    <button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {loading ? (
+                        <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-900"></div></div>
+                    ) : comments.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400 text-sm">No comments yet. Be the first!</div>
+                    ) : (
+                        comments.map(c => (
+                            <div key={c.id} className="flex gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
+                                    {c.authorAvatar ? <img src={c.authorAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-400 text-[10px]">{c.authorName[0]}</div>}
+                                </div>
+                                <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-slate-100">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs font-bold text-slate-900">{c.authorName}</span>
+                                        <span className="text-[10px] text-slate-400">{getTimeAgo(c.createdAt)}</span>
+                                    </div>
+                                    <p className="text-sm text-slate-700 leading-snug">{c.text}</p>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <div className="p-3 bg-white border-t border-slate-200 pb-8 sm:pb-3">
+                    <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-full border border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                        <div className="w-8 h-8 rounded-full bg-slate-300 overflow-hidden flex-shrink-0 ml-1">
+                             {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-500 text-[10px]">{user.fullName[0]}</div>}
+                        </div>
+                        <input 
+                            className="flex-1 bg-transparent border-none outline-none text-sm font-medium px-2"
+                            placeholder="Add a comment..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        />
+                        <button 
+                            onClick={handleSend}
+                            disabled={!newComment.trim()}
+                            className="p-2 bg-blue-600 text-white rounded-full disabled:opacity-50 disabled:bg-slate-400 transition-all hover:scale-105 active:scale-95"
+                        >
+                            <Send size={16} />
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+// Sub-component for individual feed items
+const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: string, likes: string[]) => void; onComment: (id: string) => void }> = ({ item, user, onLike, onComment }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isMuted, setIsMuted] = useState(true);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -20,7 +152,6 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
 
     useEffect(() => {
         if (item.type !== 'video') return;
-
         const observer = new IntersectionObserver(
             ([entry]) => {
                 if (entry.isIntersecting) {
@@ -29,14 +160,9 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
                     videoRef.current?.pause();
                     setIsPlaying(false);
                 }
-            },
-            { threshold: 0.6 } // Video needs to be 60% visible to play
+            }, { threshold: 0.6 }
         );
-
-        if (videoRef.current) {
-            observer.observe(videoRef.current);
-        }
-
+        if (videoRef.current) observer.observe(videoRef.current);
         return () => observer.disconnect();
     }, [item.type]);
 
@@ -46,18 +172,6 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
             videoRef.current.muted = !videoRef.current.muted;
             setIsMuted(videoRef.current.muted);
         }
-    };
-
-    const formatDate = (isoString: string) => {
-        if (!isoString) return '';
-        const now = new Date();
-        const past = new Date(isoString);
-        const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
-        if (diffInSeconds < 60) return 'Just now';
-        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-        if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-        return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(past);
     };
 
     return (
@@ -84,7 +198,7 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
                     <div>
                         <h3 className="font-extrabold text-slate-900 text-sm leading-tight">{item.authorName || "Athlete"}</h3>
                         <div className="flex items-center text-[10px] text-slate-400 font-bold mt-0.5 space-x-1">
-                            <span>{formatDate(item.date)}</span>
+                            <span>{getTimeAgo(item.date)}</span>
                             <span>•</span>
                             <span className="text-blue-600">{item.category}</span>
                         </div>
@@ -101,7 +215,7 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
             </div>
 
             {/* Media */}
-            <div className="relative w-full bg-black aspect-[4/5] sm:aspect-square overflow-hidden">
+            <div className="relative w-full bg-black aspect-[4/5] sm:aspect-square overflow-hidden bg-slate-900">
                 {item.type === 'video' ? (
                     <>
                         <video 
@@ -134,19 +248,23 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
 
             {/* Action Bar */}
             <div className="px-4 py-3 bg-slate-50 flex items-center justify-between border-t border-slate-100">
-                    <div className="flex space-x-3">
+                    <div className="flex space-x-4">
                         <button 
-                        onClick={() => onLike(item.id, item.likes || [])}
-                        className={`flex items-center space-x-1.5 transition-all ${isLiked ? 'text-red-500 scale-105' : 'text-slate-500 hover:text-slate-800'}`}
+                            onClick={() => onLike(item.id, item.likes || [])}
+                            className={`flex items-center space-x-1.5 transition-all ${isLiked ? 'text-red-500 scale-105' : 'text-slate-500 hover:text-slate-800'}`}
                         >
-                            <Heart size={22} className={isLiked ? "fill-current" : ""} />
+                            <Heart size={24} className={isLiked ? "fill-current" : ""} />
                             <span className="text-xs font-bold">{item.likes?.length || 0}</span>
                         </button>
-                        <button className="flex items-center space-x-1.5 text-slate-500 hover:text-slate-800 transition-all">
-                            <MessageCircle size={22} />
+                        <button 
+                            onClick={() => onComment(item.id)}
+                            className="flex items-center space-x-1.5 text-slate-500 hover:text-slate-800 transition-all"
+                        >
+                            <MessageCircle size={24} />
+                            <span className="text-xs font-bold">Comment</span>
                         </button>
                         <button className="text-slate-400 hover:text-slate-600">
-                            <Share2 size={22} />
+                            <Share2 size={24} />
                         </button>
                     </div>
             </div>
@@ -158,6 +276,9 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate }) => {
   const [feedItems, setFeedItems] = useState<MediaItem[]>([]);
   const [matches, setMatches] = useState<MatchEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Comment System
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
 
   useEffect(() => {
     // 1. Fetch Real Global Feed
@@ -284,10 +405,17 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate }) => {
             </div>
         ) : (
             feedItems.map((item) => (
-                <FeedCard key={item.id} item={item} user={user} onLike={handleLike} />
+                <FeedCard key={item.id} item={item} user={user} onLike={handleLike} onComment={setActiveCommentId} />
             ))
         )}
       </div>
+
+      {/* Comment Drawer */}
+      <AnimatePresence>
+        {activeCommentId && (
+            <CommentsSheet mediaId={activeCommentId} user={user} onClose={() => setActiveCommentId(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

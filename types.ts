@@ -22,6 +22,16 @@ export interface MediaItem {
   commentsCount?: number;
 }
 
+export interface Comment {
+    id: string;
+    mediaId: string;
+    userId: string;
+    text: string;
+    createdAt: string;
+    authorName: string;
+    authorAvatar: string;
+}
+
 export interface Announcement {
   id: string;
   title: string;
