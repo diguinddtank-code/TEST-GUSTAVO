@@ -3,7 +3,7 @@ import { Navigation } from './components/Navigation';
 import { Home } from './pages/Home';
 import { Upload } from './pages/Upload';
 import { Profile } from './pages/Profile';
-import { Network } from './pages/Network'; // Import Network
+import { Agenda } from './pages/Agenda'; // Changed from Search
 import { Activity } from './pages/Activity'; 
 import { Auth } from './pages/Auth';
 import { Settings } from './pages/Settings';
@@ -14,6 +14,9 @@ import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
+
+// PRODUCTION VERSION - Increment this to force auto-update for all users
+const APP_VERSION = '2.4.1'; 
 
 // Enhanced Splash Screen
 const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
@@ -53,6 +56,18 @@ const AppContent: React.FC = () => {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [loadingUser, setLoadingUser] = useState(true);
 
+  // AUTO UPDATE LOGIC
+  useEffect(() => {
+      const storedVersion = localStorage.getItem('app_version');
+      if (storedVersion !== APP_VERSION) {
+          console.log(`New version detected: ${APP_VERSION}. Updating...`);
+          localStorage.setItem('app_version', APP_VERSION);
+          // In a real PWA context with Service Workers, we would also clear cache here.
+          // For now, reloading ensures they get the new bundle if served correctly.
+          // window.location.reload(); 
+      }
+  }, []);
+
   // Real-time User & Media Listener
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -71,7 +86,6 @@ const AppContent: React.FC = () => {
                         const safeBio = data?.bio || 'Ready to work.';
                         const safePosition = data?.position || '-';
                         const safeClub = data?.club || '-';
-                        // Social Migration
                         const safeFollowers = data?.followers || [];
                         const safeFollowing = data?.following || [];
 
@@ -97,7 +111,6 @@ const AppContent: React.FC = () => {
                         };
 
                         if (needsUpdate) {
-                            console.log("Migrating old account schema (Social Update)...");
                             updateDoc(userRef, { 
                                 stats: safeStats,
                                 physical: safePhysical,
@@ -161,11 +174,9 @@ const AppContent: React.FC = () => {
 
     switch (currentTab) {
       case 'dashboard':
-        // Home is now the Feed
         return <Home user={user} mediaItems={mediaItems} onNavigate={setCurrentTab} />;
-      case 'network':
-        // New Network Tab
-        return <Network currentUser={user} onUpdateUser={setUser} />;
+      case 'agenda': // Replaced Gallery
+        return <Agenda user={user} />;
       case 'upload':
         return <Upload onNavigate={setCurrentTab} onAddMedia={() => {}} />; 
       case 'profile':

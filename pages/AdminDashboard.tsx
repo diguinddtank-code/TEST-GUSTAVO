@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, query, where, updateDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, updateDoc, doc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { UserProfile, MediaItem } from '../types';
-import { Search, LogOut, Shield, Play, Star, CheckCircle, XCircle, ChevronLeft } from 'lucide-react';
+import { UserProfile, MediaItem, MatchEvent } from '../types';
+import { LogOut, Shield, Play, CheckCircle, XCircle, ChevronLeft, Calendar, MapPin, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Profile } from './Profile';
 
@@ -11,9 +11,10 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-    const [view, setView] = useState<'users' | 'review'>('review');
+    const [view, setView] = useState<'users' | 'review' | 'schedule'>('review');
     const [athletes, setAthletes] = useState<UserProfile[]>([]);
     const [pendingMedia, setPendingMedia] = useState<MediaItem[]>([]);
+    const [matches, setMatches] = useState<MatchEvent[]>([]);
     
     // Detailed Athlete View
     const [selectedAthlete, setSelectedAthlete] = useState<UserProfile | null>(null);
@@ -24,38 +25,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const [rating, setRating] = useState(5);
     const [feedback, setFeedback] = useState('');
 
+    // Schedule Form State
+    const [newMatch, setNewMatch] = useState<Partial<MatchEvent>>({
+        opponent: '',
+        date: '',
+        time: '',
+        location: 'Home',
+        type: 'League'
+    });
+
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [view]);
 
     const fetchData = async () => {
         // Fetch Pending Media
-        const qMedia = query(collection(db, "media"), where("status", "==", "pending"));
-        const mediaSnap = await getDocs(qMedia);
-        const media: MediaItem[] = [];
-        mediaSnap.forEach((doc) => media.push({ ...doc.data(), id: doc.id } as MediaItem));
-        setPendingMedia(media);
+        if (view === 'review') {
+            const qMedia = query(collection(db, "media"), where("status", "==", "pending"));
+            const mediaSnap = await getDocs(qMedia);
+            const media: MediaItem[] = [];
+            mediaSnap.forEach((doc) => media.push({ ...doc.data(), id: doc.id } as MediaItem));
+            setPendingMedia(media);
+        }
 
-        // Fetch Athletes with Safety Checks
-        const qUsers = query(collection(db, "users"), where("role", "==", "athlete"));
-        const userSnap = await getDocs(qUsers);
-        const users: UserProfile[] = [];
-        userSnap.forEach((doc) => {
-            const data = doc.data();
-            // Protect against old data structure
-            users.push({
-                ...data,
-                id: doc.id,
-                stats: data.stats || { matches: 0, goals: 0, assists: 0 },
-                physical: data.physical || { height: '-', weight: '-', foot: '-', age: '-' },
-                role: data.role || 'athlete'
-            } as UserProfile);
-        });
-        setAthletes(users);
+        // Fetch Athletes
+        if (view === 'users') {
+            const qUsers = query(collection(db, "users"), where("role", "==", "athlete"));
+            const userSnap = await getDocs(qUsers);
+            const users: UserProfile[] = [];
+            userSnap.forEach((doc) => {
+                const data = doc.data();
+                users.push({
+                    ...data,
+                    id: doc.id,
+                    stats: data.stats || { matches: 0, goals: 0, assists: 0 },
+                    physical: data.physical || { height: '-', weight: '-', foot: '-', age: '-' },
+                    role: data.role || 'athlete'
+                } as UserProfile);
+            });
+            setAthletes(users);
+        }
+
+        // Fetch Matches
+        if (view === 'schedule') {
+            const qMatches = query(collection(db, "matches"));
+            const matchSnap = await getDocs(qMatches);
+            const loadedMatches: MatchEvent[] = [];
+            matchSnap.forEach((doc) => loadedMatches.push({ ...doc.data(), id: doc.id } as MatchEvent));
+            // Sort by date locally for simplicity
+            setMatches(loadedMatches.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+        }
     };
 
     const handleViewAthlete = async (athlete: UserProfile) => {
-        // Fetch media for this athlete
         const q = query(collection(db, "media"), where("userId", "==", athlete.id));
         const snapshot = await getDocs(q);
         const items: MediaItem[] = [];
@@ -69,7 +91,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
     const submitReview = async (status: 'approved' | 'rejected') => {
         if (!reviewItem) return;
-
         try {
             const mediaRef = doc(db, "media", reviewItem.id);
             await updateDoc(mediaRef, {
@@ -78,8 +99,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 coachFeedback: feedback,
                 reviewedAt: new Date().toISOString()
             });
-
-            // Optimistic Update
             setPendingMedia(prev => prev.filter(i => i.id !== reviewItem.id));
             setReviewItem(null);
             setRating(5);
@@ -89,6 +108,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             alert("Error saving review");
         }
     };
+
+    const handleAddMatch = async () => {
+        if (!newMatch.opponent || !newMatch.date || !newMatch.time) return;
+        try {
+            await addDoc(collection(db, "matches"), {
+                ...newMatch,
+                status: 'scheduled'
+            });
+            // Refresh
+            fetchData();
+            setNewMatch({ opponent: '', date: '', time: '', location: 'Home', type: 'League' });
+        } catch (e) {
+            console.error("Error adding match", e);
+        }
+    };
+
+    const handleDeleteMatch = async (id: string) => {
+        if(confirm("Delete this match?")) {
+            await deleteDoc(doc(db, "matches", id));
+            setMatches(prev => prev.filter(m => m.id !== id));
+        }
+    }
 
     const getAthleteName = (uid: string) => {
         return athletes.find(a => a.id === uid)?.fullName || "Unknown Athlete";
@@ -110,7 +151,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Full Admin Access</span>
                     </div>
                 </div>
-                {/* Reuse Profile Component with Admin Flag */}
                 <Profile 
                     user={selectedAthlete} 
                     mediaItems={selectedAthleteMedia} 
@@ -147,20 +187,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         onClick={() => setView('review')}
                         className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${view === 'review' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                     >
-                        Pending Reviews ({pendingMedia.length})
+                        Reviews
                     </button>
                     <button 
                         onClick={() => setView('users')}
                         className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${view === 'users' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                     >
-                        Athlete DB
+                        Athletes
+                    </button>
+                    <button 
+                        onClick={() => setView('schedule')}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${view === 'schedule' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                    >
+                        Schedule
                     </button>
                 </div>
             </div>
 
             {/* Content */}
             <div className="flex-1 p-6 overflow-y-auto">
-                {view === 'review' ? (
+                {view === 'review' && (
                     <div className="space-y-4">
                         {pendingMedia.length === 0 ? (
                             <div className="text-center py-20 opacity-50">
@@ -194,7 +240,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                             ))
                         )}
                     </div>
-                ) : (
+                )}
+
+                {view === 'users' && (
                     <div className="space-y-3">
                          {athletes.map(a => (
                              <div 
@@ -219,6 +267,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                  </div>
                              </div>
                          ))}
+                    </div>
+                )}
+
+                {view === 'schedule' && (
+                    <div className="space-y-6">
+                        {/* Add Match Form */}
+                        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <Calendar size={18} className="text-blue-600"/> Add Upcoming Match
+                            </h3>
+                            <div className="space-y-3">
+                                <input 
+                                    className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                                    placeholder="Opponent Name (e.g. Santos FC)"
+                                    value={newMatch.opponent}
+                                    onChange={(e) => setNewMatch({...newMatch, opponent: e.target.value})}
+                                />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <input 
+                                        type="date"
+                                        className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                        value={newMatch.date}
+                                        onChange={(e) => setNewMatch({...newMatch, date: e.target.value})}
+                                    />
+                                    <input 
+                                        type="time"
+                                        className="w-full p-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                        value={newMatch.time}
+                                        onChange={(e) => setNewMatch({...newMatch, time: e.target.value})}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                     <select 
+                                        className="p-3 bg-slate-50 rounded-xl text-sm font-bold outline-none"
+                                        value={newMatch.location}
+                                        onChange={(e) => setNewMatch({...newMatch, location: e.target.value})}
+                                     >
+                                         <option value="Home">Home</option>
+                                         <option value="Away">Away</option>
+                                     </select>
+                                     <button 
+                                        onClick={handleAddMatch}
+                                        disabled={!newMatch.opponent || !newMatch.date}
+                                        className="bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-50"
+                                     >
+                                         Schedule
+                                     </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* List of Matches */}
+                        <div className="space-y-3">
+                             {matches.map(m => (
+                                 <div key={m.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                     <div className="flex items-center gap-4">
+                                         <div className="bg-blue-50 text-blue-600 font-bold px-3 py-1 rounded-lg text-xs uppercase text-center w-14">
+                                             {m.location}
+                                         </div>
+                                         <div>
+                                             <h4 className="font-bold text-slate-900">vs {m.opponent}</h4>
+                                             <p className="text-xs text-slate-500">{m.date} at {m.time}</p>
+                                         </div>
+                                     </div>
+                                     <button onClick={() => handleDeleteMatch(m.id)} className="text-slate-300 hover:text-red-500">
+                                         <Trash2 size={18} />
+                                     </button>
+                                 </div>
+                             ))}
+                        </div>
                     </div>
                 )}
             </div>

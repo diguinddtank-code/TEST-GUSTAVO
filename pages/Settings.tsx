@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, LogOut, ChevronRight, UserCog, Shield, Download, Check } from 'lucide-react';
+import { Smartphone, LogOut, ChevronRight, UserCog, Shield, Download, Check, Share } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface SettingsProps {
@@ -10,8 +10,19 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({ user, onLogout }) => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
+    // Check if device is iOS
+    const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(isIosDevice);
+
+    // Check if already installed (standalone mode)
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+        setIsInstalled(true);
+    }
+
+    // Android Install Prompt
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -21,6 +32,13 @@ export const Settings: React.FC<SettingsProps> = ({ user, onLogout }) => {
   }, []);
 
   const handleInstallClick = async () => {
+    if (isInstalled) return;
+
+    if (isIOS) {
+        alert("To install on iPhone:\n1. Tap the 'Share' button below in your browser menu.\n2. Scroll down and tap 'Add to Home Screen'.");
+        return;
+    }
+
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
@@ -29,8 +47,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, onLogout }) => {
         setIsInstalled(true);
       }
     } else {
-        // Fallback for demo or if already installed/not supported
-        alert("To install: Tap the Share button in your browser and select 'Add to Home Screen'.");
+        alert("To install: Tap your browser's menu (⋮) and select 'Add to Home Screen' or 'Install App'.");
     }
   };
 
@@ -64,13 +81,20 @@ export const Settings: React.FC<SettingsProps> = ({ user, onLogout }) => {
                     <div className="text-left">
                         <div className="font-bold text-slate-900">App Version</div>
                         <div className="text-xs text-slate-500">
-                            {isInstalled ? 'Installed' : 'Download Mobile App'}
+                            {isInstalled ? 'App Installed' : 'Install Mobile App'}
                         </div>
                     </div>
                 </div>
                 {isInstalled ? <Check size={20} className="text-emerald-500" /> : <Download size={20} className="text-slate-300" />}
              </button>
              
+             {isIOS && !isInstalled && (
+                 <div className="px-4 py-3 bg-blue-50 text-blue-800 text-xs font-medium leading-relaxed">
+                     <strong className="block mb-1">iOS Installation:</strong>
+                     Tap the <Share size={12} className="inline mx-1" /> Share button in Safari, then select "Add to Home Screen".
+                 </div>
+             )}
+
              <div className="h-[1px] bg-slate-50 mx-4"></div>
 
              <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
@@ -98,7 +122,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, onLogout }) => {
 
       <div className="mt-12 text-center">
           <img src="https://www.goverum.com/wp-content/uploads/2025/12/verum-international-football-academy-bk-logo.png" className="h-8 mx-auto opacity-50 grayscale mb-2" />
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Verum Academy v2.4.0</p>
+          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Verum Academy v2.4.1</p>
       </div>
     </div>
   );

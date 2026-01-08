@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Users, Plus, User, Settings as SettingsIcon } from 'lucide-react';
+import { Home, Calendar, Plus, User, Settings as SettingsIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface NavigationProps {
@@ -10,7 +10,7 @@ interface NavigationProps {
 export const Navigation: React.FC<NavigationProps> = ({ currentTab, onTabChange }) => {
   const navItems = [
     { id: 'dashboard', icon: Home, label: 'Feed' },
-    { id: 'network', icon: Users, label: 'Network' },
+    { id: 'agenda', icon: Calendar, label: 'Agenda' }, // Changed to Agenda
     { id: 'upload', icon: Plus, label: 'Post', isMain: true },
     { id: 'profile', icon: User, label: 'Profile' },
     { id: 'settings', icon: SettingsIcon, label: 'Menu' },
