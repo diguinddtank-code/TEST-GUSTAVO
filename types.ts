@@ -23,6 +23,34 @@ export interface Announcement {
   priority: 'high' | 'normal';
 }
 
+export interface MatchEvent {
+  id: string;
+  userId: string;
+  opponent: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  location: string;
+  type: 'League' | 'Friendly' | 'Cup' | 'Training';
+  status: 'scheduled' | 'completed';
+  homeOrAway: 'Home' | 'Away';
+  result?: string; // e.g. "2-1"
+  userStats?: {
+      minutes: number;
+      goals: number;
+      assists: number;
+      rating: number; // 0-10
+  }
+}
+
+export interface Award {
+    id: string;
+    userId: string;
+    title: string;
+    date: string;
+    issuer: string;
+    icon: 'trophy' | 'medal' | 'star';
+}
+
 export interface UserProfile {
   id: string;
   email: string;

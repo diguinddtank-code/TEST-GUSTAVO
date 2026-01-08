@@ -107,18 +107,17 @@ const App: React.FC = () => {
         return <AdminDashboard onLogout={handleLogout} />;
     }
 
-    // Pass mediaItems to Home for analytics if needed
     switch (currentTab) {
       case 'dashboard':
         return <Home user={user} mediaItems={mediaItems} onNavigate={setCurrentTab} />;
       case 'gallery':
         return <Search mediaItems={mediaItems} />;
       case 'upload':
-        return <Upload onNavigate={setCurrentTab} onAddMedia={() => {}} />; // AddMedia handled by firestore listener
+        return <Upload onNavigate={setCurrentTab} onAddMedia={() => {}} />; 
       case 'inbox':
         return <Activity />;
       case 'profile':
-        return <Profile user={user} onUpdateUser={() => {}} />;
+        return <Profile user={user} mediaItems={mediaItems} onUpdateUser={() => {}} />;
       case 'settings':
         return <Settings user={user} onLogout={handleLogout} />;
       default:

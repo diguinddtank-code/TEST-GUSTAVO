@@ -1,23 +1,41 @@
-import React, { useState, useRef } from 'react';
-import { Grid, Trophy, Share2, BadgeCheck, Activity, Copy, Check, Edit2, Save, X, Plus, Camera, Upload } from 'lucide-react';
-import { UserProfile } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Grid, Trophy, Share2, BadgeCheck, Activity, Copy, Check, Edit2, Save, X, Plus, Camera, Upload, Trash2 } from 'lucide-react';
+import { UserProfile, MediaItem, Award } from '../types';
 import { db } from '../firebaseConfig';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ProfileProps {
   user: UserProfile;
+  mediaItems?: MediaItem[];
   onUpdateUser: (u: UserProfile) => void;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, mediaItems = [], onUpdateUser }) => {
   const [activeTab, setActiveTab] = useState<'highlights' | 'awards'>('highlights');
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Awards Logic
+  const [awards, setAwards] = useState<Award[]>([]);
+  const [showAwardModal, setShowAwardModal] = useState(false);
+  const [newAward, setNewAward] = useState<Partial<Award>>({ title: '', date: '', issuer: '', icon: 'trophy' });
+
   // Local edit state
   const [editForm, setEditForm] = useState(user);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Fetch Awards
+    const q = query(collection(db, "awards"), where("userId", "==", user.id));
+    const unsub = onSnapshot(q, (snap) => {
+        const fetched: Award[] = [];
+        snap.forEach(d => fetched.push({ ...d.data(), id: d.id } as Award));
+        setAwards(fetched);
+    });
+    return () => unsub();
+  }, [user.id]);
 
   const handleShare = () => {
     if (navigator.share) {
@@ -55,6 +73,13 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
     }
   };
 
+  const handleAddAward = async () => {
+      if(!newAward.title || !newAward.date) return;
+      await addDoc(collection(db, "awards"), { ...newAward, userId: user.id });
+      setShowAwardModal(false);
+      setNewAward({ title: '', date: '', issuer: '', icon: 'trophy' });
+  };
+
   const handleImageClick = () => {
       if (isEditing && fileInputRef.current) {
           fileInputRef.current.click();
@@ -67,8 +92,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
           const reader = new FileReader();
           reader.onloadend = () => {
               const base64String = reader.result as string;
-              // Warning: Storing Base64 in Firestore isn't scalable for large apps, 
-              // but fits the "functional database" request without Storage setup overhead.
               setEditForm(prev => ({ ...prev, avatarUrl: base64String }));
           };
           reader.readAsDataURL(file);
@@ -77,6 +100,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
 
   const hasPhysicalData = user.physical.height !== '-' && user.physical.weight !== '-';
   const hasAvatar = !!editForm.avatarUrl;
+  
+  // Filter for highlights (Approved clips)
+  const highlights = mediaItems.filter(m => m.status === 'approved' || m.status === 'featured');
 
   return (
     <div className="pb-32 animate-in fade-in duration-500 bg-slate-50 min-h-full">
@@ -92,7 +118,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
              <div className="absolute top-6 right-6 z-10 flex space-x-2">
                   <button 
                     onClick={() => {
-                        // Reset form if cancelling, or just toggle
                         if(isEditing) setEditForm(user); 
                         setIsEditing(!isEditing);
                     }}
@@ -204,7 +229,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
                       )}
                   </div>
 
-                  {/* Physical Stats - Pill Style */}
+                  {/* Physical Stats */}
                   <div className="flex justify-between items-center bg-slate-50 rounded-2xl p-2 border border-slate-100 mb-2 shadow-sm">
                       {[
                         { label: 'Age', key: 'age', val: user.physical.age },
@@ -252,25 +277,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
           </div>
       </div>
 
-      {/* Empty State Warning */}
-      {!hasPhysicalData && !isEditing && (
-          <div className="px-6 mt-4">
-              <div 
-                onClick={() => setIsEditing(true)}
-                className="bg-orange-50 border border-orange-100 rounded-2xl p-4 flex items-center space-x-4 cursor-pointer hover:bg-orange-100 transition-colors"
-              >
-                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-500">
-                      <Edit2 size={20} />
-                  </div>
-                  <div className="flex-1">
-                      <h4 className="text-orange-900 font-bold text-sm">Complete your profile</h4>
-                      <p className="text-orange-700 text-xs">Add your physical stats to get scouted.</p>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* Season Stats - Cards */}
+      {/* Stats Cards - Static for now, could be calculated from Match History in v2 */}
       <div className="px-6 mb-8 mt-6">
           <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-widest mb-4 flex items-center">
               <Activity size={16} className="mr-2 text-blue-500" /> Season Stats
@@ -294,7 +301,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
           </div>
       </div>
 
-      {/* Toggle View */}
+      {/* Tabs */}
       <div className="bg-white border-t border-slate-100 min-h-[300px]">
           <div className="flex border-b border-slate-100 px-6">
              <button 
@@ -303,6 +310,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
              >
                  <Grid size={18} />
                  <span>Highlights</span>
+                 <span className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded ml-1">{highlights.length}</span>
              </button>
              <button 
                 onClick={() => setActiveTab('awards')}
@@ -316,46 +324,105 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
           <div className="p-6">
               {activeTab === 'highlights' ? (
                   <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
-                      {/* Empty state for highlights if new user */}
-                      {user.stats.matches === 0 ? (
+                      {highlights.length === 0 ? (
                            <div className="col-span-2 py-8 flex flex-col items-center text-slate-400">
                                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
                                    <Upload size={20} />
                                </div>
-                               <p className="text-xs font-bold">No highlights yet.</p>
-                               <p className="text-[10px]">Go to Upload tab to add media.</p>
+                               <p className="text-xs font-bold">No approved highlights yet.</p>
+                               <p className="text-[10px]">Upload media to get featured.</p>
                            </div>
                       ) : (
-                        [1,2,3,4].map((i) => (
-                            <div key={i} className="aspect-video bg-slate-100 rounded-xl overflow-hidden relative group cursor-pointer shadow-sm">
-                                <img src={`https://picsum.photos/seed/soccer_h${i}/300/200`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-90 group-hover:opacity-100" />
-                                <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                        highlights.map((item) => (
+                            <div key={item.id} className="aspect-[4/3] bg-slate-900 rounded-xl overflow-hidden relative group cursor-pointer shadow-sm">
+                                <img src={item.thumbnailUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80 group-hover:opacity-100" />
+                                <div className="absolute top-2 right-2 bg-black/50 backdrop-blur rounded px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">{item.category}</div>
                             </div>
                         ))
                       )}
                   </div>
               ) : (
                   <div className="space-y-4 animate-in fade-in duration-300">
-                       {user.stats.matches === 0 ? (
+                       <button 
+                          onClick={() => setShowAwardModal(true)}
+                          className="w-full border-2 border-dashed border-slate-200 rounded-xl p-3 flex items-center justify-center text-xs font-bold text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                       >
+                           <Plus size={16} className="mr-1" /> Add Award
+                       </button>
+
+                       {awards.length === 0 ? (
                            <div className="py-8 flex flex-col items-center text-slate-400">
                                <Trophy size={32} className="mb-2 opacity-20" />
                                <p className="text-xs font-bold">No awards listed.</p>
                            </div>
                        ) : (
-                          <div className="flex items-center space-x-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                              <div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center">
-                                  <Trophy size={24} fill="currentColor" />
-                              </div>
-                              <div>
-                                  <h4 className="font-bold text-slate-900">State Cup Champion</h4>
-                                  <p className="text-xs text-slate-500">2023 • U-17 Division</p>
-                              </div>
-                          </div>
+                          awards.map(award => (
+                            <div key={award.id} className="flex items-center space-x-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <Trophy size={24} fill="currentColor" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-slate-900">{award.title}</h4>
+                                    <p className="text-xs text-slate-500">{award.date} • {award.issuer}</p>
+                                </div>
+                            </div>
+                          ))
                        )}
                   </div>
               )}
           </div>
       </div>
+
+      {/* Add Award Modal */}
+      <AnimatePresence>
+      {showAwardModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div 
+                 initial={{ scale: 0.9, opacity: 0 }}
+                 animate={{ scale: 1, opacity: 1 }}
+                 exit={{ scale: 0.9, opacity: 0 }}
+                 className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl"
+              >
+                  <h3 className="text-xl font-bold mb-4">Add Achievement</h3>
+                  <div className="space-y-3">
+                      <input 
+                         className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-blue-500"
+                         placeholder="Title (e.g. MVP)"
+                         value={newAward.title}
+                         onChange={e => setNewAward({...newAward, title: e.target.value})}
+                      />
+                      <input 
+                         className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-blue-500"
+                         placeholder="Issuer (e.g. State League)"
+                         value={newAward.issuer}
+                         onChange={e => setNewAward({...newAward, issuer: e.target.value})}
+                      />
+                      <input 
+                         type="date"
+                         className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold outline-none focus:border-blue-500"
+                         value={newAward.date}
+                         onChange={e => setNewAward({...newAward, date: e.target.value})}
+                      />
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                      <button 
+                        onClick={() => setShowAwardModal(false)}
+                        className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                        onClick={handleAddAward}
+                        disabled={!newAward.title}
+                        className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl"
+                      >
+                          Save
+                      </button>
+                  </div>
+              </motion.div>
+          </div>
+      )}
+      </AnimatePresence>
     </div>
   );
 };
