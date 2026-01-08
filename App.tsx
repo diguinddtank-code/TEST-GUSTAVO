@@ -7,14 +7,11 @@ import { Search } from './pages/Search';
 import { Activity } from './pages/Activity'; 
 import { Auth } from './pages/Auth';
 import { Settings } from './pages/Settings';
+import { AdminDashboard } from './pages/AdminDashboard';
 import { UserProfile, MediaItem } from './types';
-
-// Default Media Data (Mock)
-const defaultMedia: MediaItem[] = [
-  { id: '1', type: 'video', title: 'Goal vs Corinthians', date: '2d ago', status: 'approved', category: 'Match', thumbnailUrl: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=400&fit=crop', duration: '00:45' },
-  { id: '2', type: 'video', title: 'Dribbling Drills', date: '1w ago', status: 'featured', category: 'Training', thumbnailUrl: 'https://images.unsplash.com/photo-1526232761682-d26e03ac148e?w=400&fit=crop', duration: '01:20' },
-  { id: '3', type: 'photo', title: 'Team Photo', date: '2w ago', status: 'approved', category: 'Physical', thumbnailUrl: 'https://images.unsplash.com/photo-1511886929837-354d827aae26?w=400&fit=crop' },
-];
+import { auth, db } from './firebaseConfig';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 // Splash Screen Component
 const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
@@ -56,53 +53,80 @@ const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(defaultMedia);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [initializing, setInitializing] = useState(true);
 
-  // Load user and media from local storage
+  // Initialize Auth Listener
   useEffect(() => {
-    const savedUser = localStorage.getItem('verum_user');
-    if (savedUser) {
-        setUser(JSON.parse(savedUser));
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+            // Fetch User Data from Firestore
+            const docRef = doc(db, "users", firebaseUser.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const userData = docSnap.data() as UserProfile;
+                setUser(userData);
+                
+                // Fetch Media for this user
+                fetchUserMedia(userData.id);
+            }
+        } else {
+            setUser(null);
+            setMediaItems([]);
+        }
+        setInitializing(false);
+    });
 
-    const savedMedia = localStorage.getItem('verum_media');
-    if (savedMedia) {
-        // Merge saved media with defaults or just replace
-        setMediaItems(JSON.parse(savedMedia));
-    }
+    return () => unsubscribe();
   }, []);
+
+  const fetchUserMedia = async (userId: string) => {
+      try {
+          const q = query(collection(db, "media"), where("userId", "==", userId));
+          const querySnapshot = await getDocs(q);
+          const items: MediaItem[] = [];
+          querySnapshot.forEach((doc) => {
+              items.push(doc.data() as MediaItem);
+          });
+          // Sort by date newest
+          setMediaItems(items.sort((a,b) => Number(b.id) - Number(a.id)));
+      } catch (e) {
+          console.error("Error fetching media", e);
+      }
+  };
 
   const handleLogin = (newUser: UserProfile) => {
     setUser(newUser);
-    localStorage.setItem('verum_user', JSON.stringify(newUser));
+    fetchUserMedia(newUser.id);
   };
 
   const handleUpdateUser = (updatedUser: UserProfile) => {
     setUser(updatedUser);
-    localStorage.setItem('verum_user', JSON.stringify(updatedUser));
+    // Profile updates are handled inside Profile.tsx direct to Firestore, 
+    // but we update local state here to reflect immediately
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut(auth);
     setUser(null);
-    localStorage.removeItem('verum_user');
     setCurrentTab('dashboard');
   };
 
   const handleAddMedia = (newItem: MediaItem) => {
-      const updatedMedia = [newItem, ...mediaItems];
-      setMediaItems(updatedMedia);
-      // Try/Catch for LocalStorage quota limits (videos can be large)
-      try {
-        localStorage.setItem('verum_media', JSON.stringify(updatedMedia));
-      } catch (e) {
-          console.warn("Storage quota exceeded, media saved in session only.");
-      }
+      // Optimistic update
+      setMediaItems([newItem, ...mediaItems]);
       setCurrentTab('gallery');
   };
 
   const renderContent = () => {
     if (!user) return null;
 
+    // Admin Routing
+    if (user.role === 'admin') {
+        return <AdminDashboard onLogout={handleLogout} />;
+    }
+
+    // Athlete Routing
     switch (currentTab) {
       case 'dashboard':
         return <Home user={user} />;
@@ -121,12 +145,17 @@ const App: React.FC = () => {
     }
   };
 
-  if (showSplash) {
+  if (showSplash || initializing) {
       return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
   if (!user) {
       return <Auth onLogin={handleLogin} />;
+  }
+
+  // If Admin, render full screen dashboard without bottom nav
+  if (user.role === 'admin') {
+      return renderContent();
   }
 
   return (

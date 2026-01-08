@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Video, Image as ImageIcon, Check, ChevronRight, UploadCloud, X, Loader2, ArrowRight, Trash2, Play } from 'lucide-react';
 import { MediaItem } from '../types';
+import { auth, db } from '../firebaseConfig';
+import { addDoc, collection } from 'firebase/firestore';
 
 interface UploadProps {
   onNavigate: (tab: string) => void;
@@ -51,30 +53,36 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
       if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSubmit = () => {
-    if (!title || !category || !fileUrl || !selectedType) return;
+  const handleSubmit = async () => {
+    if (!title || !category || !fileUrl || !selectedType || !auth.currentUser) return;
     
     setIsSubmitting(true);
     
-    // Create Media Item
-    const newItem: MediaItem = {
-        id: Date.now().toString(),
-        type: selectedType,
-        title: title,
-        category: category as any,
-        date: 'Just now',
-        status: 'pending', // Default status for new uploads
-        thumbnailUrl: fileUrl, // Use the base64 string as source
-        duration: selectedType === 'video' ? '00:00' : undefined 
-    };
+    try {
+        const newItem: MediaItem = {
+            id: Date.now().toString(), // Will be overwritten by Firestore ID in real app, but useful for optimistic UI
+            userId: auth.currentUser.uid,
+            type: selectedType,
+            title: title,
+            category: category as any,
+            date: new Date().toLocaleDateString(),
+            status: 'pending', 
+            thumbnailUrl: fileUrl, 
+            duration: selectedType === 'video' ? '00:00' : undefined 
+        };
 
-    // Simulate network delay then save
-    setTimeout(() => {
+        // Save to Firestore 'media' collection
+        await addDoc(collection(db, "media"), newItem);
+
         onAddMedia(newItem);
         setIsSubmitting(false);
-        // Reset form is handled by the navigation change in parent, but good to clear
         handleReset();
-    }, 1500);
+
+    } catch (e) {
+        console.error("Error uploading media", e);
+        alert("Upload failed. Try a smaller file.");
+        setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {

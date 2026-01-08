@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Mail, Lock, ArrowRight, User, Loader2 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { auth, db } from '../firebaseConfig';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 interface AuthProps {
   onLogin: (user: UserProfile) => void;
@@ -9,53 +12,52 @@ interface AuthProps {
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   
   // Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
 
-    // Simulate Network Request
-    setTimeout(() => {
-      let newUser: UserProfile;
-
+    try {
       if (isLogin) {
-          // DEMO LOGIN: Loads the populated "Diego" profile for demonstration
-          newUser = {
-            id: 'demo_user',
-            email: email || 'diego@verum.com',
-            fullName: 'Diego Silva',
-            username: 'diego_10',
-            avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop',
-            position: 'Attacking Midfielder',
-            club: 'Flamengo U17',
-            bio: 'Focused on reaching the pros.',
-            physical: {
-              height: '1.78m',
-              weight: '68kg',
-              foot: 'Right',
-              age: '17'
-            },
-            stats: {
-              matches: 24,
-              goals: 12,
-              assists: 8
-            }
-          };
+          // LOGIN LOGIC
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const uid = userCredential.user.uid;
+
+          // Fetch user profile from Firestore
+          const docRef = doc(db, "users", uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+              onLogin(docSnap.data() as UserProfile);
+          } else {
+              setError("User profile not found in database.");
+          }
+
       } else {
-          // SIGN UP: Creates a RAW, clean profile that the user must configure
-          newUser = {
-            id: Date.now().toString(),
+          // SIGN UP LOGIC
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const uid = userCredential.user.uid;
+
+          // SECRET ADMIN HACK FOR TESTING:
+          // If email contains "admin", create as admin role automatically
+          const role = email.includes('admin') ? 'admin' : 'athlete';
+
+          const newUser: UserProfile = {
+            id: uid,
             email: email,
+            role: role,
             fullName: name,
             username: name.toLowerCase().replace(/\s/g, '_'),
-            avatarUrl: '', // Empty initially
-            position: '-', // Placeholder
-            club: '-', // Placeholder
+            avatarUrl: '', 
+            position: '-',
+            club: '-',
             bio: 'Profile not configured.',
             physical: {
               height: '-',
@@ -69,16 +71,22 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               assists: 0
             }
           };
-      }
 
-      onLogin(newUser);
-      setIsLoading(false);
-    }, 1500);
+          // Save to Firestore
+          await setDoc(doc(db, "users", uid), newUser);
+          onLogin(newUser);
+      }
+    } catch (err: any) {
+        console.error(err);
+        setError(err.message || "Authentication failed. Check your config.");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      {/* Background Decor - Subtle for Light Theme */}
+      {/* Background Decor */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-400/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-400/10 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
 
@@ -98,6 +106,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+           {error && (
+               <div className="bg-red-50 text-red-500 text-sm p-3 rounded-xl border border-red-100 text-center font-bold">
+                   {error}
+               </div>
+           )}
+
            {!isLogin && (
               <div className="group bg-white border border-slate-200 rounded-2xl p-1 flex items-center focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-50 transition-all shadow-sm">
                   <div className="w-12 h-12 flex items-center justify-center text-slate-400 group-focus-within:text-blue-500 transition-colors">

@@ -1,5 +1,7 @@
+
 export interface MediaItem {
   id: string;
+  userId: string; // Link media to a user
   thumbnailUrl: string;
   title: string;
   date: string;
@@ -7,6 +9,8 @@ export interface MediaItem {
   category: 'Match' | 'Training' | 'Physical';
   status: 'pending' | 'approved' | 'featured';
   duration?: string;
+  userFullName?: string; // For Admin view
+  userAvatar?: string; // For Admin view
 }
 
 export interface Announcement {
@@ -19,10 +23,11 @@ export interface Announcement {
 
 export interface UserProfile {
   id: string;
-  email: string; // Added email for auth
+  email: string;
+  role: 'admin' | 'athlete'; // Role based access control
   username: string;
   fullName: string;
-  avatarUrl: string; // Can be empty initially
+  avatarUrl: string;
   position: string;
   club: string;
   bio: string;
@@ -30,7 +35,7 @@ export interface UserProfile {
     height: string;
     weight: string;
     foot: string;
-    age: string; // Changed to string for easier input handling
+    age: string;
   };
   stats: {
     matches: number;

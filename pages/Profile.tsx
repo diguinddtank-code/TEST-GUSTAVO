@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Grid, Trophy, Share2, BadgeCheck, Activity, Copy, Check, Edit2, Save, X, Plus, Camera, Upload } from 'lucide-react';
 import { UserProfile } from '../types';
+import { db } from '../firebaseConfig';
+import { doc, updateDoc } from 'firebase/firestore';
 
 interface ProfileProps {
   user: UserProfile;
@@ -11,6 +13,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
   const [activeTab, setActiveTab] = useState<'highlights' | 'awards'>('highlights');
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Local edit state
@@ -30,9 +33,26 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
     }
   };
 
-  const handleSave = () => {
-    onUpdateUser(editForm);
-    setIsEditing(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+        const userRef = doc(db, "users", user.id);
+        await updateDoc(userRef, {
+            fullName: editForm.fullName,
+            position: editForm.position,
+            club: editForm.club,
+            avatarUrl: editForm.avatarUrl,
+            physical: editForm.physical
+        });
+        
+        onUpdateUser(editForm);
+        setIsEditing(false);
+    } catch (e) {
+        console.error("Error updating profile", e);
+        alert("Failed to save profile.");
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const handleImageClick = () => {
@@ -47,6 +67,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
           const reader = new FileReader();
           reader.onloadend = () => {
               const base64String = reader.result as string;
+              // Warning: Storing Base64 in Firestore isn't scalable for large apps, 
+              // but fits the "functional database" request without Storage setup overhead.
               setEditForm(prev => ({ ...prev, avatarUrl: base64String }));
           };
           reader.readAsDataURL(file);
@@ -213,10 +235,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
                   {isEditing && (
                       <button 
                         onClick={handleSave}
-                        className="w-full mt-6 bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-900/20 active:scale-[0.98] transition-transform flex items-center justify-center space-x-2"
+                        disabled={isSaving}
+                        className="w-full mt-6 bg-slate-900 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-900/20 active:scale-[0.98] transition-transform flex items-center justify-center space-x-2 disabled:opacity-50"
                       >
-                          <Save size={20} />
-                          <span>Save Changes</span>
+                          {isSaving ? (
+                              <span>Saving...</span>
+                          ) : (
+                              <>
+                                  <Save size={20} />
+                                  <span>Save Changes</span>
+                              </>
+                          )}
                       </button>
                   )}
               </div>
