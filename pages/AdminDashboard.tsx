@@ -58,6 +58,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 users.push({
                     ...data,
                     id: doc.id,
+                    fullName: data.fullName || 'Athlete',
                     stats: data.stats || { matches: 0, goals: 0, assists: 0 },
                     physical: data.physical || { height: '-', weight: '-', foot: '-', age: '-' },
                     role: data.role || 'athlete'
@@ -147,7 +148,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         <ChevronLeft size={20} />
                     </button>
                     <div>
-                        <h2 className="font-bold text-lg leading-none">{selectedAthlete.fullName}</h2>
+                        <h2 className="font-bold text-lg leading-none">{selectedAthlete.fullName || "Athlete"}</h2>
                         <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Full Admin Access</span>
                     </div>
                 </div>
@@ -254,11 +255,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                      {a.avatarUrl ? (
                                         <img src={a.avatarUrl} className="w-full h-full object-cover" />
                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">{a.fullName[0]}</div>
+                                        <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">{a.fullName?.[0] || 'A'}</div>
                                      )}
                                  </div>
                                  <div className="min-w-0 flex-1">
-                                     <h3 className="font-bold text-slate-900 truncate">{a.fullName}</h3>
+                                     <h3 className="font-bold text-slate-900 truncate">{a.fullName || "Unknown"}</h3>
                                      <p className="text-xs text-slate-500">{a.position} • {a.club}</p>
                                  </div>
                                  <div className="ml-auto text-right flex-shrink-0">
