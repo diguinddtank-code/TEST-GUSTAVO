@@ -8,6 +8,7 @@ import { Activity } from './pages/Activity';
 import { Auth } from './pages/Auth';
 import { Settings } from './pages/Settings';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { ErrorBoundary } from './components/ErrorBoundary'; // Import ErrorBoundary
 import { UserProfile, MediaItem } from './types';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -45,7 +46,7 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
   );
 };
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -60,49 +61,57 @@ const App: React.FC = () => {
             const userRef = doc(db, "users", firebaseUser.uid);
             const unsubUser = onSnapshot(userRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    
-                    // --- AUTO-MIGRATION LOGIC ---
-                    // This fixes "White Screen" bugs for old accounts by checking 
-                    // if new fields (stats, physical, role) exist.
-                    // If not, it adds default values and updates Firestore.
-                    
-                    let needsUpdate = false;
-                    const safeStats = data.stats || { matches: 0, goals: 0, assists: 0, minutesPlayed: 0, ratingAvg: 0 };
-                    const safePhysical = data.physical || { height: '-', weight: '-', foot: '-', age: '-' };
-                    const safeRole = data.role || 'athlete';
-                    const safeBio = data.bio || 'Ready to work.';
+                    try {
+                        const data = docSnap.data();
+                        
+                        // --- PARANOID MIGRATION LOGIC ---
+                        // Use optional chaining (?.) everywhere to prevent crashes during checks
+                        
+                        let needsUpdate = false;
+                        const safeStats = data?.stats || { matches: 0, goals: 0, assists: 0, minutesPlayed: 0, ratingAvg: 0 };
+                        const safePhysical = data?.physical || { height: '-', weight: '-', foot: '-', age: '-' };
+                        const safeRole = data?.role || 'athlete';
+                        const safeBio = data?.bio || 'Ready to work.';
+                        const safePosition = data?.position || '-';
+                        const safeClub = data?.club || '-';
 
-                    if (!data.stats || !data.physical || !data.role || !data.bio) {
-                        needsUpdate = true;
-                    }
+                        // Check if critical fields are missing
+                        if (!data?.stats || !data?.physical || !data?.role || !data?.bio) {
+                            needsUpdate = true;
+                        }
 
-                    const cleanUser: UserProfile = {
-                        id: docSnap.id,
-                        email: data.email || '',
-                        fullName: data.fullName || 'Athlete',
-                        username: data.username || data.fullName?.toLowerCase().replace(/\s/g, '_') || 'user',
-                        avatarUrl: data.avatarUrl || '',
-                        position: data.position || '-',
-                        club: data.club || '-',
-                        role: safeRole,
-                        bio: safeBio,
-                        physical: safePhysical,
-                        stats: safeStats
-                    };
-
-                    if (needsUpdate) {
-                        console.log("Migrating old account schema...");
-                        // Update Firestore in background to fix account permanently
-                        updateDoc(userRef, { 
-                            stats: safeStats,
-                            physical: safePhysical,
+                        const cleanUser: UserProfile = {
+                            id: docSnap.id,
+                            email: data?.email || '',
+                            fullName: data?.fullName || 'Athlete',
+                            username: data?.username || data?.fullName?.toLowerCase().replace(/\s/g, '_') || 'user',
+                            avatarUrl: data?.avatarUrl || '',
+                            position: safePosition,
+                            club: safeClub,
                             role: safeRole,
-                            bio: safeBio
-                        }).catch(e => console.error("Migration save failed", e));
-                    }
+                            bio: safeBio,
+                            physical: safePhysical,
+                            stats: safeStats
+                        };
 
-                    setUser(cleanUser);
+                        if (needsUpdate) {
+                            console.log("Migrating old account schema...");
+                            updateDoc(userRef, { 
+                                stats: safeStats,
+                                physical: safePhysical,
+                                role: safeRole,
+                                bio: safeBio,
+                                position: safePosition,
+                                club: safeClub
+                            }).catch(e => console.error("Migration save failed", e));
+                        }
+
+                        setUser(cleanUser);
+                    } catch (err) {
+                        console.error("Critical error parsing user data", err);
+                        // If parsing fails, we might want to force logout via ErrorBoundary eventually
+                        // But for now, letting it bubble up or keeping user null might be safer
+                    }
                 }
             });
 
@@ -113,7 +122,6 @@ const App: React.FC = () => {
                 snapshot.forEach((doc) => {
                     items.push({ ...doc.data(), id: doc.id } as MediaItem);
                 });
-                // Sort by date desc
                 setMediaItems(items.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
             });
 
@@ -133,7 +141,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleLogin = (newUser: UserProfile) => {
-    setUser(newUser); // Optimistic
+    setUser(newUser);
   };
 
   const handleLogout = async () => {
@@ -232,6 +240,14 @@ const App: React.FC = () => {
       </div>
     </div>
   );
+};
+
+const App: React.FC = () => {
+    return (
+        <ErrorBoundary>
+            <AppContent />
+        </ErrorBoundary>
+    );
 };
 
 export default App;
