@@ -68,11 +68,16 @@ export interface UserProfile {
   position: string;
   club: string;
   bio: string;
+  
+  // Personal Info
+  phone?: string;
+  dob?: string; // Date of Birth YYYY-MM-DD
+
   physical: {
-    height: string;
-    weight: string;
+    height: string; // Stored as "180" (cm)
+    weight: string; // Stored as "75" (kg)
     foot: 'Right' | 'Left' | 'Both' | '-';
-    age: string;
+    age: string; // Auto-calc preferred, but stored for now
   };
   stats: {
     matches: number;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, Plus, Trash2, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, Plus, Trash2, Bell, AlertCircle } from 'lucide-react';
 import { UserProfile } from '../types';
 import { db } from '../firebaseConfig';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, addDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AgendaProps {
@@ -24,6 +24,7 @@ export const Agenda: React.FC<AgendaProps> = ({ user }) => {
     const [items, setItems] = useState<AgendaItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [notificationPermission, setNotificationPermission] = useState(Notification.permission);
     
     // Form State
     const [newItem, setNewItem] = useState<Partial<AgendaItem>>({
@@ -36,52 +37,56 @@ export const Agenda: React.FC<AgendaProps> = ({ user }) => {
 
     useEffect(() => {
         // Fetch User Agenda
-        const q = query(
-            collection(db, "agenda"), 
-            where("userId", "==", user.id)
-            // Note: orderBy needs a composite index in Firestore, skipping for simple MVP or doing client sort
-        );
-
+        const q = query(collection(db, "agenda"), where("userId", "==", user.id));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const loaded: AgendaItem[] = [];
-            snapshot.forEach(doc => {
-                loaded.push({ ...doc.data(), id: doc.id } as AgendaItem);
-            });
-            // Client-side sort
+            snapshot.forEach(doc => loaded.push({ ...doc.data(), id: doc.id } as AgendaItem));
             loaded.sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
             setItems(loaded);
             setLoading(false);
+            
+            // Check for notifications immediately upon load
+            checkUpcomingEvents(loaded);
         });
+
+        // Request Notification Permission
+        if (Notification.permission === 'default') {
+            Notification.requestPermission().then(setNotificationPermission);
+        }
 
         return () => unsubscribe();
     }, [user.id]);
 
+    const checkUpcomingEvents = (events: AgendaItem[]) => {
+        if (Notification.permission !== 'granted') return;
+
+        const now = new Date();
+        events.forEach(event => {
+            const eventTime = new Date(`${event.date}T${event.time}`);
+            const diffMs = eventTime.getTime() - now.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+
+            // Notify if event is within next 30 minutes
+            if (diffMins > 0 && diffMins <= 30) {
+                new Notification(`Upcoming: ${event.title}`, {
+                    body: `${event.type} starts in ${diffMins} minutes at ${event.location || 'Unknown location'}.`,
+                    icon: '/icon.png' // Would normally point to app icon
+                });
+            }
+        });
+    }
+
     const handleAddItem = async () => {
         if(!newItem.title || !newItem.date) return;
-        
         try {
-            await addDoc(collection(db, "agenda"), {
-                ...newItem,
-                userId: user.id,
-                createdAt: new Date().toISOString()
-            });
+            await addDoc(collection(db, "agenda"), { ...newItem, userId: user.id, createdAt: new Date().toISOString() });
             setShowModal(false);
             setNewItem({ title: '', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Training', location: '' });
-        } catch(e) {
-            console.error(e);
-            alert("Could not save event");
-        }
+        } catch(e) { console.error(e); }
     };
 
     const handleDelete = async (id: string) => {
-        if(confirm("Delete this event?")) {
-            await deleteDoc(doc(db, "agenda", id));
-        }
-    }
-
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(date);
+        if(confirm("Delete this event?")) await deleteDoc(doc(db, "agenda", id));
     }
 
     return (
@@ -89,7 +94,9 @@ export const Agenda: React.FC<AgendaProps> = ({ user }) => {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">My Agenda</h1>
-                    <p className="text-sm text-slate-500 font-medium">Organize your career.</p>
+                    <p className="text-sm text-slate-500 font-medium">
+                        {notificationPermission === 'granted' ? 'Notifications Active' : 'Enable notifications for alerts'}
+                    </p>
                 </div>
                 <button 
                     onClick={() => setShowModal(true)}
@@ -149,11 +156,7 @@ export const Agenda: React.FC<AgendaProps> = ({ user }) => {
                                     </div>
                                 </div>
                             </div>
-                            
-                            <button 
-                                onClick={() => handleDelete(item.id)}
-                                className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors p-2"
-                            >
+                            <button onClick={() => handleDelete(item.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors p-2">
                                 <Trash2 size={18} />
                             </button>
                         </motion.div>
@@ -166,16 +169,12 @@ export const Agenda: React.FC<AgendaProps> = ({ user }) => {
                 {showModal && (
                     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4">
                         <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
                             onClick={() => setShowModal(false)}
                         />
                         <motion.div 
-                            initial={{ y: "100%" }}
-                            animate={{ y: 0 }}
-                            exit={{ y: "100%" }}
+                            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
                             className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 relative z-10 shadow-2xl"
                         >
                             <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
@@ -188,9 +187,7 @@ export const Agenda: React.FC<AgendaProps> = ({ user }) => {
                                             key={t}
                                             onClick={() => setNewItem({...newItem, type: t as any})}
                                             className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                                                newItem.type === t 
-                                                ? 'bg-slate-900 text-white border-slate-900' 
-                                                : 'bg-white text-slate-500 border-slate-200'
+                                                newItem.type === t ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'
                                             }`}
                                         >
                                             {t}
