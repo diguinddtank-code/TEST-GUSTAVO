@@ -42,10 +42,17 @@ const CommentsSheet: React.FC<{ mediaId: string; user: UserProfile; onClose: () 
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const q = query(collection(db, "comments"), where("mediaId", "==", mediaId), orderBy("createdAt", "asc"));
+        // FIX: Removed orderBy("createdAt", "asc") from Firestore query to prevent "Index Required" error.
+        // We sort client-side below instead.
+        const q = query(collection(db, "comments"), where("mediaId", "==", mediaId));
+        
         const unsub = onSnapshot(q, (snap) => {
             const loaded: Comment[] = [];
             snap.forEach(d => loaded.push({ ...d.data(), id: d.id } as Comment));
+            
+            // Sort client-side
+            loaded.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            
             setComments(loaded);
             setLoading(false);
         });
