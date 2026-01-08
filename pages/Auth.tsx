@@ -3,7 +3,7 @@ import { Mail, Lock, ArrowRight, User, Loader2 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { auth, db } from '../firebaseConfig';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 
 interface AuthProps {
   onLogin: (user: UserProfile) => void;
@@ -35,7 +35,33 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           const docSnap = await getDoc(docRef);
 
           if (docSnap.exists()) {
-              onLogin(docSnap.data() as UserProfile);
+              const data = docSnap.data();
+              
+              // Validate and patch data for old accounts
+              const safeUser: UserProfile = {
+                  id: uid,
+                  email: data.email || email,
+                  fullName: data.fullName || 'Athlete',
+                  username: data.username || data.fullName?.toLowerCase().replace(/\s/g, '_') || 'user',
+                  role: data.role || 'athlete',
+                  avatarUrl: data.avatarUrl || '',
+                  position: data.position || '-',
+                  club: data.club || '-',
+                  bio: data.bio || 'Ready to work.',
+                  physical: data.physical || { height: '-', weight: '-', foot: '-', age: '-' },
+                  stats: data.stats || { matches: 0, goals: 0, assists: 0 }
+              };
+              
+              // If fields were missing, update Firestore immediately
+              if(!data.stats || !data.physical || !data.role) {
+                  await updateDoc(docRef, {
+                      stats: safeUser.stats,
+                      physical: safeUser.physical,
+                      role: safeUser.role
+                  });
+              }
+
+              onLogin(safeUser);
           } else {
               setError("User profile not found in database.");
           }

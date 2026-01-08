@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { collection, getDocs, query, where, updateDoc, doc, orderBy } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { UserProfile, MediaItem } from '../types';
-import { Search, LogOut, Shield, Play, Star, CheckCircle, XCircle } from 'lucide-react';
+import { Search, LogOut, Shield, Play, Star, CheckCircle, XCircle, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Profile } from './Profile';
 
 interface AdminDashboardProps {
     onLogout: () => void;
@@ -14,6 +15,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const [athletes, setAthletes] = useState<UserProfile[]>([]);
     const [pendingMedia, setPendingMedia] = useState<MediaItem[]>([]);
     
+    // Detailed Athlete View
+    const [selectedAthlete, setSelectedAthlete] = useState<UserProfile | null>(null);
+    const [selectedAthleteMedia, setSelectedAthleteMedia] = useState<MediaItem[]>([]);
+
     // Review Modal State
     const [reviewItem, setReviewItem] = useState<MediaItem | null>(null);
     const [rating, setRating] = useState(5);
@@ -31,12 +36,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         mediaSnap.forEach((doc) => media.push({ ...doc.data(), id: doc.id } as MediaItem));
         setPendingMedia(media);
 
-        // Fetch Athletes
+        // Fetch Athletes with Safety Checks
         const qUsers = query(collection(db, "users"), where("role", "==", "athlete"));
         const userSnap = await getDocs(qUsers);
         const users: UserProfile[] = [];
-        userSnap.forEach((doc) => users.push(doc.data() as UserProfile));
+        userSnap.forEach((doc) => {
+            const data = doc.data();
+            // Protect against old data structure
+            users.push({
+                ...data,
+                id: doc.id,
+                stats: data.stats || { matches: 0, goals: 0, assists: 0 },
+                physical: data.physical || { height: '-', weight: '-', foot: '-', age: '-' },
+                role: data.role || 'athlete'
+            } as UserProfile);
+        });
         setAthletes(users);
+    };
+
+    const handleViewAthlete = async (athlete: UserProfile) => {
+        // Fetch media for this athlete
+        const q = query(collection(db, "media"), where("userId", "==", athlete.id));
+        const snapshot = await getDocs(q);
+        const items: MediaItem[] = [];
+        snapshot.forEach((doc) => {
+            items.push({ ...doc.data(), id: doc.id } as MediaItem);
+        });
+        
+        setSelectedAthleteMedia(items.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setSelectedAthlete(athlete);
     };
 
     const submitReview = async (status: 'approved' | 'rejected') => {
@@ -65,6 +93,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const getAthleteName = (uid: string) => {
         return athletes.find(a => a.id === uid)?.fullName || "Unknown Athlete";
     };
+
+    // If viewing a single athlete profile
+    if (selectedAthlete) {
+        return (
+            <div className="fixed inset-0 z-50 bg-slate-50 overflow-y-auto animate-in slide-in-from-right duration-300">
+                <div className="sticky top-0 z-40 bg-slate-900 text-white px-4 py-3 shadow-md flex items-center gap-4">
+                    <button 
+                        onClick={() => setSelectedAthlete(null)}
+                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                    >
+                        <ChevronLeft size={20} />
+                    </button>
+                    <div>
+                        <h2 className="font-bold text-lg leading-none">{selectedAthlete.fullName}</h2>
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Full Admin Access</span>
+                    </div>
+                </div>
+                {/* Reuse Profile Component with Admin Flag */}
+                <Profile 
+                    user={selectedAthlete} 
+                    mediaItems={selectedAthleteMedia} 
+                    onUpdateUser={(updated) => {
+                        setSelectedAthlete(updated);
+                        setAthletes(prev => prev.map(a => a.id === updated.id ? updated : a));
+                    }}
+                    isAdmin={true}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -139,16 +197,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 ) : (
                     <div className="space-y-3">
                          {athletes.map(a => (
-                             <div key={a.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4">
-                                 <div className="w-12 h-12 bg-slate-100 rounded-full overflow-hidden">
-                                     <img src={a.avatarUrl || `https://ui-avatars.com/api/?name=${a.fullName}`} className="w-full h-full object-cover" />
+                             <div 
+                                key={a.id} 
+                                onClick={() => handleViewAthlete(a)}
+                                className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all active:scale-[0.98]"
+                             >
+                                 <div className="w-12 h-12 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                                     {a.avatarUrl ? (
+                                        <img src={a.avatarUrl} className="w-full h-full object-cover" />
+                                     ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">{a.fullName[0]}</div>
+                                     )}
                                  </div>
-                                 <div>
-                                     <h3 className="font-bold text-slate-900">{a.fullName}</h3>
+                                 <div className="min-w-0 flex-1">
+                                     <h3 className="font-bold text-slate-900 truncate">{a.fullName}</h3>
                                      <p className="text-xs text-slate-500">{a.position} • {a.club}</p>
                                  </div>
-                                 <div className="ml-auto text-right">
-                                     <div className="text-xs font-bold text-slate-900">{a.stats.matches} Gms</div>
+                                 <div className="ml-auto text-right flex-shrink-0">
+                                     <div className="text-xs font-bold text-slate-900">{a.stats?.matches || 0} Gms</div>
                                      <div className="text-[10px] text-slate-400">Stats</div>
                                  </div>
                              </div>

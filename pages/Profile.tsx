@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Grid, Trophy, Share2, BadgeCheck, Activity, Copy, Check, Edit2, Save, X, Plus, Camera, Upload, Trash2 } from 'lucide-react';
+import { Grid, Trophy, Share2, BadgeCheck, Activity, Copy, Check, Edit2, Save, X, Plus, Camera, Upload, Trash2, Clock, AlertCircle } from 'lucide-react';
 import { UserProfile, MediaItem, Award } from '../types';
 import { db } from '../firebaseConfig';
 import { doc, updateDoc, collection, addDoc, query, where, onSnapshot } from 'firebase/firestore';
@@ -9,9 +9,10 @@ interface ProfileProps {
   user: UserProfile;
   mediaItems?: MediaItem[];
   onUpdateUser: (u: UserProfile) => void;
+  isAdmin?: boolean;
 }
 
-export const Profile: React.FC<ProfileProps> = ({ user, mediaItems = [], onUpdateUser }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, mediaItems = [], onUpdateUser, isAdmin = false }) => {
   const [activeTab, setActiveTab] = useState<'highlights' | 'awards'>('highlights');
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -101,8 +102,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, mediaItems = [], onUpdat
   const hasPhysicalData = user.physical.height !== '-' && user.physical.weight !== '-';
   const hasAvatar = !!editForm.avatarUrl;
   
-  // Filter for highlights (Approved clips)
-  const highlights = mediaItems.filter(m => m.status === 'approved' || m.status === 'featured');
+  // Filter for highlights (If Admin, show all. If Athlete, show Approved/Featured)
+  const highlights = isAdmin 
+      ? mediaItems 
+      : mediaItems.filter(m => m.status === 'approved' || m.status === 'featured');
 
   return (
     <div className="pb-32 animate-in fade-in duration-500 bg-slate-50 min-h-full">
@@ -309,7 +312,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, mediaItems = [], onUpdat
                 className={`py-5 text-sm font-bold flex items-center space-x-2 mr-6 transition-colors border-b-2 ${activeTab === 'highlights' ? 'text-slate-900 border-slate-900' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
              >
                  <Grid size={18} />
-                 <span>Highlights</span>
+                 <span>Media</span>
                  <span className="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded ml-1">{highlights.length}</span>
              </button>
              <button 
@@ -329,13 +332,18 @@ export const Profile: React.FC<ProfileProps> = ({ user, mediaItems = [], onUpdat
                                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
                                    <Upload size={20} />
                                </div>
-                               <p className="text-xs font-bold">No approved highlights yet.</p>
-                               <p className="text-[10px]">Upload media to get featured.</p>
+                               <p className="text-xs font-bold">No media found.</p>
+                               <p className="text-[10px]">{isAdmin ? 'Athlete has not uploaded yet.' : 'Upload media to get featured.'}</p>
                            </div>
                       ) : (
                         highlights.map((item) => (
                             <div key={item.id} className="aspect-[4/3] bg-slate-900 rounded-xl overflow-hidden relative group cursor-pointer shadow-sm">
                                 <img src={item.thumbnailUrl} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80 group-hover:opacity-100" />
+                                {isAdmin && (
+                                    <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase text-white ${item.status === 'approved' ? 'bg-emerald-500' : item.status === 'pending' ? 'bg-amber-500' : 'bg-red-500'}`}>
+                                        {item.status}
+                                    </div>
+                                )}
                                 <div className="absolute top-2 right-2 bg-black/50 backdrop-blur rounded px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">{item.category}</div>
                             </div>
                         ))

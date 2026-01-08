@@ -11,7 +11,7 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { UserProfile, MediaItem } from './types';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // Enhanced Splash Screen
@@ -56,11 +56,53 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
-            // Real-time user listener
+            // Real-time user listener with Schema Migration
             const userRef = doc(db, "users", firebaseUser.uid);
             const unsubUser = onSnapshot(userRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    setUser(docSnap.data() as UserProfile);
+                    const data = docSnap.data();
+                    
+                    // --- AUTO-MIGRATION LOGIC ---
+                    // This fixes "White Screen" bugs for old accounts by checking 
+                    // if new fields (stats, physical, role) exist.
+                    // If not, it adds default values and updates Firestore.
+                    
+                    let needsUpdate = false;
+                    const safeStats = data.stats || { matches: 0, goals: 0, assists: 0, minutesPlayed: 0, ratingAvg: 0 };
+                    const safePhysical = data.physical || { height: '-', weight: '-', foot: '-', age: '-' };
+                    const safeRole = data.role || 'athlete';
+                    const safeBio = data.bio || 'Ready to work.';
+
+                    if (!data.stats || !data.physical || !data.role || !data.bio) {
+                        needsUpdate = true;
+                    }
+
+                    const cleanUser: UserProfile = {
+                        id: docSnap.id,
+                        email: data.email || '',
+                        fullName: data.fullName || 'Athlete',
+                        username: data.username || data.fullName?.toLowerCase().replace(/\s/g, '_') || 'user',
+                        avatarUrl: data.avatarUrl || '',
+                        position: data.position || '-',
+                        club: data.club || '-',
+                        role: safeRole,
+                        bio: safeBio,
+                        physical: safePhysical,
+                        stats: safeStats
+                    };
+
+                    if (needsUpdate) {
+                        console.log("Migrating old account schema...");
+                        // Update Firestore in background to fix account permanently
+                        updateDoc(userRef, { 
+                            stats: safeStats,
+                            physical: safePhysical,
+                            role: safeRole,
+                            bio: safeBio
+                        }).catch(e => console.error("Migration save failed", e));
+                    }
+
+                    setUser(cleanUser);
                 }
             });
 
