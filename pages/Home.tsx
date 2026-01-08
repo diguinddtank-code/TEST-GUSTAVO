@@ -1,114 +1,156 @@
 import React, { useState } from 'react';
-import { Calendar, ChevronRight, AlertCircle, Sparkles, TrendingUp, Clock, X, MapPin } from 'lucide-react';
-import { Announcement, UserProfile } from '../types';
-
-const announcements: Announcement[] = [
-  {
-    id: '1',
-    title: 'Match Schedule Updated',
-    content: 'The away game vs Santos has been moved to Saturday, 10:00 AM.',
-    date: 'Today',
-    priority: 'high'
-  },
-  {
-    id: '2',
-    title: 'Media Day Requirements',
-    content: 'Full home kit required. Meeting at Field 2.',
-    date: 'Yesterday',
-    priority: 'normal'
-  }
-];
+import { Calendar, ChevronRight, AlertCircle, Sparkles, TrendingUp, Clock, MapPin, Activity } from 'lucide-react';
+import { Announcement, UserProfile, MediaItem } from '../types';
+import { motion } from 'framer-motion';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface HomeProps {
     user: UserProfile;
+    mediaItems: MediaItem[];
+    onNavigate: (tab: string) => void;
 }
 
-export const Home: React.FC<HomeProps> = ({ user }) => {
+export const Home: React.FC<HomeProps> = ({ user, mediaItems, onNavigate }) => {
   const [showSchedule, setShowSchedule] = useState(false);
   const firstName = user.fullName.split(' ')[0];
 
-  return (
-    <div className="pb-32 pt-6 px-6 animate-in fade-in slide-in-from-bottom-4 duration-700 min-h-full relative">
-      
-      {/* Welcome Section */}
-      <div className="mb-8 flex justify-between items-end">
-        <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                Hello, <span className="text-blue-600">{firstName}.</span>
-            </h1>
-            <p className="text-slate-500 font-medium text-sm mt-1">Ready to make an impact today?</p>
-        </div>
-      </div>
+  // Calculate Stats
+  const approvedCount = mediaItems.filter(i => i.status === 'approved').length;
+  const pendingCount = mediaItems.filter(i => i.status === 'pending').length;
+  
+  // Mock Data for Chart (would come from DB in real prod)
+  const data = [
+    { name: 'Jan', performance: 65 },
+    { name: 'Feb', performance: 70 },
+    { name: 'Mar', performance: 68 },
+    { name: 'Apr', performance: 85 },
+    { name: 'May', performance: 82 },
+    { name: 'Jun', performance: 90 },
+  ];
 
-      {/* Main Stats Widget - Dark Premium Feel */}
-      <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl shadow-slate-900/20 mb-6 relative overflow-hidden group">
-         {/* Abstract Decoration */}
-         <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-600 rounded-full blur-3xl opacity-20 group-hover:opacity-30 transition-opacity duration-500"></div>
-         <div className="absolute -left-10 bottom-0 w-32 h-32 bg-emerald-500 rounded-full blur-3xl opacity-10"></div>
+  return (
+    <div className="pb-32 pt-4 px-6 min-h-full">
+      
+      {/* Welcome & Context */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6"
+      >
+        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            Ready to work,<br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-emerald-500">{firstName}?</span>
+        </h1>
+      </motion.div>
+
+      {/* Performance Card (Chart) */}
+      <motion.div 
+         initial={{ scale: 0.95, opacity: 0 }}
+         animate={{ scale: 1, opacity: 1 }}
+         transition={{ delay: 0.1 }}
+         className="bg-slate-900 text-white rounded-[32px] p-6 shadow-2xl shadow-slate-900/30 mb-6 relative overflow-hidden"
+      >
+         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600 rounded-full blur-[80px] opacity-20 -translate-y-1/2 translate-x-1/3"></div>
          
          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex justify-between items-center mb-6">
                 <div>
-                    <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Highlights</div>
-                    <div className="text-4xl font-black tracking-tight">{Math.floor(Math.random() * 10) + user.stats.goals} <span className="text-lg font-medium text-slate-400">clips</span></div>
+                    <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Performance Index</div>
+                    <div className="text-3xl font-black tracking-tight flex items-end">
+                        92.4 <span className="text-sm font-bold text-emerald-400 mb-1 ml-2 flex items-center"><TrendingUp size={14} className="mr-1"/> +2.4%</span>
+                    </div>
                 </div>
-                <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10">
-                    <TrendingUp size={24} className="text-emerald-400" />
+                <div className="bg-white/10 p-2.5 rounded-2xl">
+                    <Activity className="text-blue-400" size={24} />
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-3 border border-white/5 hover:bg-white/10 transition-colors">
-                    <div className="flex items-center space-x-2 text-orange-300 mb-1">
-                        <Clock size={14} />
-                        <span className="text-xs font-bold uppercase">Pending</span>
-                    </div>
-                    <div className="text-xl font-bold">1</div>
-                </div>
-                <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-3 border border-white/5 hover:bg-white/10 transition-colors">
-                    <div className="flex items-center space-x-2 text-emerald-300 mb-1">
-                        <Sparkles size={14} />
-                        <span className="text-xs font-bold uppercase">Approved</span>
-                    </div>
-                    <div className="text-xl font-bold">{Math.floor(Math.random() * 5)}</div>
-                </div>
+            {/* Recharts Graph */}
+            <div className="h-32 w-full -ml-4">
+                <ResponsiveContainer width="110%" height="100%">
+                    <AreaChart data={data}>
+                    <defs>
+                        <linearGradient id="colorPerf" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                    </defs>
+                    <Tooltip cursor={false} contentStyle={{ display: 'none' }} />
+                    <Area type="monotone" dataKey="performance" stroke="#60a5fa" strokeWidth={3} fillOpacity={1} fill="url(#colorPerf)" />
+                    </AreaChart>
+                </ResponsiveContainer>
             </div>
          </div>
+      </motion.div>
+
+      {/* Status Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-8">
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onNavigate('gallery')}
+            className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-start relative overflow-hidden group"
+          >
+              <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Clock size={48} />
+              </div>
+              <div className="bg-orange-50 text-orange-600 p-2 rounded-xl mb-2">
+                  <Clock size={20} />
+              </div>
+              <span className="text-3xl font-black text-slate-900">{pendingCount}</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Review</span>
+          </motion.button>
+
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onNavigate('gallery')}
+            className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-start relative overflow-hidden group"
+          >
+              <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Sparkles size={48} />
+              </div>
+              <div className="bg-emerald-50 text-emerald-600 p-2 rounded-xl mb-2">
+                  <Sparkles size={20} />
+              </div>
+              <span className="text-3xl font-black text-slate-900">{approvedCount}</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Approved Clips</span>
+          </motion.button>
       </div>
 
-      {/* Next Event Ticket */}
+      {/* Next Match Ticket */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4 px-1">
             <h3 className="font-bold text-slate-900 text-lg">Next Match</h3>
             <button 
                 onClick={() => setShowSchedule(true)}
-                className="text-blue-600 text-xs font-bold flex items-center hover:underline"
+                className="text-blue-600 text-xs font-bold flex items-center hover:bg-blue-50 px-3 py-1 rounded-full transition-colors"
             >
-                View Calendar <ChevronRight size={14} />
+                Calendar <ChevronRight size={14} />
             </button>
         </div>
         
-        <div className="bg-white rounded-3xl p-1 shadow-lg shadow-slate-200/50 border border-slate-100">
-            <div className="bg-slate-50 rounded-[20px] p-5 border border-slate-100/50 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-blue-100 to-transparent rounded-bl-full opacity-50"></div>
-                
-                <div className="flex items-center space-x-4 mb-4">
-                    <div className="bg-white w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-bold text-slate-800 shadow-sm border border-slate-100">
-                        <span className="text-[10px] font-extrabold text-blue-600 uppercase">OCT</span>
-                        <span className="text-xl leading-none mt-0.5">02</span>
+        <div className="bg-white rounded-[28px] p-2 shadow-lg shadow-slate-200/50 border border-slate-100">
+            <div className="bg-slate-50 rounded-[22px] p-5 border border-slate-100 relative overflow-hidden">
+                {/* Team Logos (Mock) */}
+                <div className="flex justify-between items-center mb-6 px-2">
+                    <div className="text-center">
+                        <div className="w-12 h-12 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center text-xs font-black text-slate-900 mb-2">VER</div>
+                        <span className="text-xs font-bold text-slate-500">Verum</span>
                     </div>
-                    <div>
-                        <div className="flex items-center space-x-2 mb-1">
-                            <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">LEAGUE</span>
-                        </div>
-                        <div className="font-extrabold text-slate-900 text-lg">vs Palmeiras</div>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">VS</span>
+                        <span className="text-xl font-black text-slate-900">14:00</span>
+                    </div>
+                    <div className="text-center">
+                        <div className="w-12 h-12 bg-white rounded-full shadow-sm border border-slate-100 flex items-center justify-center text-xs font-black text-slate-900 mb-2">SAN</div>
+                        <span className="text-xs font-bold text-slate-500">Santos</span>
                     </div>
                 </div>
                 
-                <div className="flex items-center text-sm text-slate-500 bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                     <Calendar size={16} className="mr-2 text-slate-400" /> 
-                     <span className="font-semibold text-slate-700 mr-2">02:00 PM</span>
-                     <span className="w-1 h-1 bg-slate-300 rounded-full mr-2"></span>
+                <div className="flex items-center justify-center text-xs font-bold text-slate-500 bg-white py-3 rounded-xl border border-slate-100 shadow-sm">
+                     <Calendar size={14} className="mr-2 text-blue-500" /> 
+                     <span>Oct 02</span>
+                     <span className="mx-3 text-slate-300">|</span>
+                     <MapPin size={14} className="mr-2 text-blue-500" /> 
                      <span>Away Field</span>
                 </div>
             </div>
@@ -116,72 +158,39 @@ export const Home: React.FC<HomeProps> = ({ user }) => {
       </div>
 
       {/* Announcements */}
-      <div>
-         <div className="flex items-center justify-between mb-4 px-1">
-             <h3 className="font-bold text-slate-900 text-lg">Board</h3>
-         </div>
-         <div className="space-y-3">
-             {announcements.map(notice => (
-                 <div key={notice.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-md shadow-slate-200/40 hover:shadow-lg hover:scale-[1.01] transition-all duration-300 group">
-                     <div className="flex items-start space-x-4">
-                         <div className={`p-2 rounded-xl mt-0.5 transition-colors ${notice.priority === 'high' ? 'bg-red-50 text-red-500 group-hover:bg-red-100' : 'bg-blue-50 text-blue-500 group-hover:bg-blue-100'}`}>
-                             <AlertCircle size={20} />
-                         </div>
-                         <div className="flex-1">
-                             <div className="flex justify-between items-start mb-1">
-                                <h4 className="font-bold text-slate-900 text-sm leading-tight">{notice.title}</h4>
-                                <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-1 rounded-full">{notice.date}</span>
-                             </div>
-                             <p className="text-xs text-slate-500 leading-relaxed font-medium">{notice.content}</p>
-                         </div>
+      <div className="space-y-3">
+         <h3 className="font-bold text-slate-900 text-lg px-1">Academy Board</h3>
+         {[1].map((notice) => (
+             <div key={notice} className="bg-blue-600 p-5 rounded-3xl text-white shadow-lg shadow-blue-600/20 relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+                 <div className="flex items-start space-x-3 relative z-10">
+                     <AlertCircle size={20} className="text-blue-200 mt-0.5" />
+                     <div>
+                         <h4 className="font-bold text-lg mb-1">Schedule Update</h4>
+                         <p className="text-sm text-blue-100 leading-relaxed font-medium">Training tomorrow is moved to Field 4 due to maintenance.</p>
                      </div>
                  </div>
-             ))}
-         </div>
+             </div>
+         ))}
       </div>
 
-      {/* Schedule Overlay */}
+      {/* Schedule Modal (Simplified for brevity) */}
       {showSchedule && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-            <div 
-                className="bg-white w-full max-w-md rounded-t-[32px] p-6 pb-24 shadow-2xl animate-in slide-in-from-bottom duration-300"
+        <div 
+            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setShowSchedule(false)}
+        >
+            <motion.div 
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                className="bg-white w-full max-w-md rounded-t-[32px] p-8 pb-12"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-extrabold text-slate-900">Upcoming Matches</h2>
-                    <button 
-                        onClick={() => setShowSchedule(false)}
-                        className="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
-                
-                <div className="space-y-4">
-                    {[
-                        { day: '24', month: 'SEP', team: 'Santos FC', time: '10:00 AM', loc: 'Field 2' },
-                        { day: '02', month: 'OCT', team: 'Palmeiras', time: '02:00 PM', loc: 'Away' },
-                        { day: '10', month: 'OCT', team: 'Vasco da Gama', time: '09:00 AM', loc: 'Main Stadium' },
-                    ].map((match, i) => (
-                        <div key={i} className="flex items-center space-x-4 border-b border-slate-100 pb-4 last:border-0">
-                            <div className="bg-slate-50 w-12 h-12 rounded-xl flex flex-col items-center justify-center font-bold text-slate-700 border border-slate-100">
-                                <span className="text-[10px] text-slate-400">{match.month}</span>
-                                <span>{match.day}</span>
-                            </div>
-                            <div className="flex-1">
-                                <div className="font-bold text-slate-900">{match.team}</div>
-                                <div className="text-xs text-slate-500 flex items-center mt-0.5">
-                                    <Clock size={12} className="mr-1" /> {match.time} 
-                                    <span className="mx-1.5">•</span> 
-                                    <MapPin size={12} className="mr-1" /> {match.loc}
-                                </div>
-                            </div>
-                            <button className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg">Details</button>
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <div className="absolute inset-0 -z-10" onClick={() => setShowSchedule(false)}></div>
+                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4">Upcoming Fixtures</h2>
+                <p className="text-slate-500 text-sm">Full season calendar available in PDF.</p>
+            </motion.div>
         </div>
       )}
 

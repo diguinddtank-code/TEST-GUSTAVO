@@ -1,16 +1,18 @@
-
 export interface MediaItem {
   id: string;
-  userId: string; // Link media to a user
+  userId: string;
   thumbnailUrl: string;
   title: string;
-  date: string;
+  date: string; // ISO string preferred for sorting
   type: 'video' | 'photo';
-  category: 'Match' | 'Training' | 'Physical';
-  status: 'pending' | 'approved' | 'featured';
+  category: 'Match' | 'Training' | 'Physical' | 'Tactical';
+  status: 'pending' | 'approved' | 'rejected' | 'featured';
   duration?: string;
-  userFullName?: string; // For Admin view
-  userAvatar?: string; // For Admin view
+  
+  // New Fields for SaaS Value
+  coachRating?: number; // 0-10
+  coachFeedback?: string;
+  views?: number;
 }
 
 export interface Announcement {
@@ -24,7 +26,7 @@ export interface Announcement {
 export interface UserProfile {
   id: string;
   email: string;
-  role: 'admin' | 'athlete'; // Role based access control
+  role: 'admin' | 'athlete';
   username: string;
   fullName: string;
   avatarUrl: string;
@@ -34,13 +36,15 @@ export interface UserProfile {
   physical: {
     height: string;
     weight: string;
-    foot: string;
+    foot: 'Right' | 'Left' | 'Both' | '-';
     age: string;
   };
   stats: {
     matches: number;
     goals: number;
     assists: number;
+    minutesPlayed?: number;
+    ratingAvg?: number; // Calculated from media ratings
   };
 }
 
@@ -50,5 +54,6 @@ export interface Notification {
   message: string;
   time: string;
   read: boolean;
-  type: 'feedback' | 'system';
+  type: 'feedback' | 'system' | 'alert';
+  linkToMediaId?: string; // Deep link to content
 }

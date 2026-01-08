@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Filter, Play, Image as ImageIcon, CheckCircle, Clock, Star } from 'lucide-react';
+import { Filter, Play, Image as ImageIcon, CheckCircle, Clock, Star, MessageCircle, X } from 'lucide-react';
 import { MediaItem } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface SearchProps {
   mediaItems: MediaItem[];
@@ -8,30 +9,31 @@ interface SearchProps {
 
 export const Search: React.FC<SearchProps> = ({ mediaItems }) => {
   const [filter, setFilter] = useState('All');
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
 
   const filteredMedia = mediaItems.filter(item => 
       filter === 'All' ? true : item.category === filter
   );
 
   return (
-    <div className="pb-32 pt-6 px-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">My Media</h1>
-          <button className="w-10 h-10 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center text-slate-600 active:scale-95 transition-transform">
-             <Filter size={20} />
-          </button>
+    <div className="pb-32 pt-6 px-6 h-full flex flex-col">
+      <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Gallery</h1>
+          <div className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-xs font-bold">
+              {filteredMedia.length} Items
+          </div>
       </div>
 
       {/* iOS Style Segmented Control */}
-      <div className="bg-slate-200/50 p-1.5 rounded-2xl flex space-x-1 mb-8 overflow-x-auto no-scrollbar">
+      <div className="flex space-x-2 mb-6 overflow-x-auto no-scrollbar pb-2">
           {['All', 'Match', 'Training', 'Physical'].map(tab => (
               <button 
                 key={tab}
                 onClick={() => setFilter(tab)}
-                className={`flex-1 min-w-[80px] py-2.5 rounded-xl text-xs font-bold transition-all duration-300 shadow-sm ${
+                className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all duration-300 border ${
                     filter === tab 
-                    ? 'bg-white text-slate-900 shadow-md scale-100' 
-                    : 'bg-transparent text-slate-500 hover:text-slate-700 shadow-none'
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/20' 
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                 }`}
               >
                   {tab}
@@ -39,72 +41,123 @@ export const Search: React.FC<SearchProps> = ({ mediaItems }) => {
           ))}
       </div>
 
-      {/* Modern Grid */}
-      {filteredMedia.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 opacity-50">
-              <ImageIcon size={48} className="text-slate-300 mb-4" />
-              <p className="text-sm font-bold text-slate-400">No media found.</p>
-          </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-5">
-            {filteredMedia.map(item => (
-                <div key={item.id} className="group relative break-inside-avoid">
-                    <div className="aspect-[4/5] w-full rounded-2xl overflow-hidden relative shadow-lg shadow-slate-200/50 border border-white/50 bg-slate-900">
-                        {item.type === 'video' ? (
-                            <video src={item.thumbnailUrl} className="w-full h-full object-cover opacity-80 transition-transform duration-700 group-hover:scale-105" muted playsInline />
-                        ) : (
-                            <img src={item.thumbnailUrl} alt={item.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                        )}
-                        
-                        {/* Gradient Overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-transparent to-transparent opacity-80"></div>
-
-                        {/* Video Indicator */}
-                        {item.type === 'video' && (
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30 group-hover:scale-110 transition-transform">
-                                <Play size={20} className="fill-white text-white ml-1" />
-                            </div>
-                        )}
-
-                        {/* Top Badges */}
-                        <div className="absolute top-3 right-3 flex flex-col items-end space-y-1">
-                            {item.status === 'featured' && (
-                                <div className="bg-yellow-400/90 backdrop-blur-sm text-yellow-950 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-lg shadow-yellow-500/20 animate-pulse flex items-center space-x-1">
-                                    <Star size={10} fill="currentColor" />
-                                    <span>STAR</span>
-                                </div>
-                            )}
-                            {item.status === 'pending' && (
-                                <div className="bg-slate-900/80 backdrop-blur-sm text-white p-1.5 rounded-full shadow-lg border border-white/10">
-                                    <Clock size={12} />
-                                </div>
-                            )}
-                            {item.status === 'approved' && (
-                                <div className="bg-emerald-500/90 backdrop-blur-sm text-white p-1.5 rounded-full shadow-lg border border-emerald-400/50 hover:scale-110 transition-transform">
-                                    <CheckCircle size={12} />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Bottom Info */}
-                        <div className="absolute bottom-0 left-0 right-0 p-4">
-                            <div className="flex justify-between items-end">
-                                <div className="flex-1 mr-2">
-                                    <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-0.5">{item.category}</div>
-                                    <h4 className="font-bold text-white text-sm leading-tight line-clamp-2">{item.title}</h4>
-                                </div>
-                                {item.duration && (
-                                    <div className="text-[10px] font-mono font-medium text-white/80 bg-black/40 px-1.5 py-0.5 rounded backdrop-blur-sm">
-                                        {item.duration}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+      {/* Masonry-ish Grid */}
+      <div className="grid grid-cols-2 gap-4 pb-20">
+            {filteredMedia.map((item, index) => (
+                <motion.div 
+                    layoutId={`media-${item.id}`}
+                    key={item.id} 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => setSelectedMedia(item)}
+                    className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-900 cursor-pointer shadow-md"
+                >
+                    <img src={item.thumbnailUrl} alt={item.title} className="w-full h-full object-cover opacity-80" />
+                    
+                    {/* Status Badge */}
+                    <div className="absolute top-2 right-2">
+                         {item.status === 'approved' && <div className="bg-emerald-500 text-white p-1 rounded-full"><CheckCircle size={10} /></div>}
+                         {item.status === 'pending' && <div className="bg-slate-500/50 backdrop-blur text-white p-1 rounded-full"><Clock size={10} /></div>}
                     </div>
-                </div>
+
+                    {/* Gradient & Info */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-3">
+                        <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-0.5">{item.category}</span>
+                        <h4 className="text-white text-sm font-bold leading-tight line-clamp-2">{item.title}</h4>
+                        
+                        {/* Rating Indicator */}
+                        {item.coachRating && (
+                            <div className="flex items-center space-x-1 mt-2">
+                                <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                                <span className="text-xs font-bold text-white">{item.coachRating}/10</span>
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
             ))}
-        </div>
+      </div>
+
+      {/* Media Detail Modal */}
+      <AnimatePresence>
+      {selectedMedia && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedMedia(null)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              />
+              
+              <motion.div 
+                layoutId={`media-${selectedMedia.id}`}
+                className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden relative z-10 shadow-2xl"
+              >
+                  {/* Media Viewer */}
+                  <div className="aspect-square bg-black relative">
+                       {selectedMedia.type === 'video' ? (
+                           <video src={selectedMedia.thumbnailUrl} className="w-full h-full object-cover" controls autoPlay loop />
+                       ) : (
+                           <img src={selectedMedia.thumbnailUrl} className="w-full h-full object-cover" />
+                       )}
+                       <button 
+                        onClick={() => setSelectedMedia(null)}
+                        className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full"
+                       >
+                           <X size={20} />
+                       </button>
+                  </div>
+
+                  {/* Details & Feedback */}
+                  <div className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                          <div>
+                              <h2 className="text-xl font-extrabold text-slate-900 leading-tight">{selectedMedia.title}</h2>
+                              <p className="text-slate-500 text-sm mt-1">{selectedMedia.category} • {selectedMedia.date}</p>
+                          </div>
+                          {selectedMedia.status === 'approved' ? (
+                               <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200">
+                                   Approved
+                               </div>
+                          ) : (
+                               <div className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-bold border border-slate-200">
+                                   Pending
+                               </div>
+                          )}
+                      </div>
+
+                      {/* Coach Feedback Section */}
+                      {selectedMedia.coachFeedback ? (
+                          <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+                              <div className="flex items-center space-x-2 mb-2">
+                                  <MessageCircle size={16} className="text-blue-600" />
+                                  <span className="text-xs font-bold text-blue-900 uppercase">Coach Feedback</span>
+                              </div>
+                              <p className="text-slate-700 text-sm font-medium leading-relaxed">"{selectedMedia.coachFeedback}"</p>
+                              <div className="mt-3 flex items-center">
+                                  <div className="flex">
+                                    {[1,2,3,4,5].map(star => (
+                                        <Star 
+                                            key={star} 
+                                            size={14} 
+                                            className={`${(selectedMedia.coachRating || 0) / 2 >= star ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} 
+                                        />
+                                    ))}
+                                  </div>
+                                  <span className="ml-2 text-xs font-bold text-slate-500">{selectedMedia.coachRating}/10</span>
+                              </div>
+                          </div>
+                      ) : (
+                          <div className="text-center py-6 text-slate-400 border-2 border-dashed border-slate-100 rounded-2xl">
+                              <p className="text-xs font-bold">Waiting for coach review...</p>
+                          </div>
+                      )}
+                  </div>
+              </motion.div>
+          </div>
       )}
+      </AnimatePresence>
     </div>
   );
 };

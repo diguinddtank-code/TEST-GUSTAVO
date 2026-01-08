@@ -11,41 +11,37 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { UserProfile, MediaItem } from './types';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { AnimatePresence, motion } from 'framer-motion';
 
-// Splash Screen Component
+// Enhanced Splash Screen
 const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
-  const [fading, setFading] = useState(false);
-
   useEffect(() => {
-    // Start fade out after animation
-    const timer = setTimeout(() => {
-      setFading(true);
-      setTimeout(onFinish, 500); 
-    }, 2500);
+    const timer = setTimeout(onFinish, 2200);
     return () => clearTimeout(timer);
   }, [onFinish]);
 
   return (
-    <div className={`fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center transition-opacity duration-700 ${fading ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-      <div className="relative animate-kick-in flex flex-col items-center">
-        <div className="relative mb-6">
-           <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full scale-150"></div>
-           <img 
-              src="https://www.goverum.com/wp-content/uploads/2025/12/verum-international-football-academy-bk-logo.png" 
-              alt="Verum International Football Academy" 
-              className="w-48 h-auto object-contain relative z-10 drop-shadow-xl"
-           />
-        </div>
-        
-        <div className="h-1 bg-slate-900 rounded-full mb-4 animate-line opacity-0"></div>
-
-        <div className="text-center space-y-2 opacity-0 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500 fill-mode-forwards px-8">
-            <h2 className="text-sm font-extrabold text-slate-900 tracking-[0.1em] uppercase">Pro Football Opportunity</h2>
-            <p className="text-xs font-medium text-slate-400">and Education Pathway</p>
-        </div>
-      </div>
-    </div>
+    <motion.div 
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5 }}
+      className="fixed inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center"
+    >
+      <motion.div 
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", duration: 1.5 }}
+        className="relative"
+      >
+        <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full scale-150 animate-pulse"></div>
+        <img 
+            src="https://www.goverum.com/wp-content/uploads/2025/12/verum-international-football-academy-bk-logo.png" 
+            alt="Verum" 
+            className="w-48 h-auto object-contain relative z-10"
+        />
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -54,56 +50,48 @@ const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const [initializing, setInitializing] = useState(true);
+  const [loadingUser, setLoadingUser] = useState(true);
 
-  // Initialize Auth Listener
+  // Real-time User & Media Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
-            // Fetch User Data from Firestore
-            const docRef = doc(db, "users", firebaseUser.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const userData = docSnap.data() as UserProfile;
-                setUser(userData);
-                
-                // Fetch Media for this user
-                fetchUserMedia(userData.id);
-            }
+            // Real-time user listener
+            const userRef = doc(db, "users", firebaseUser.uid);
+            const unsubUser = onSnapshot(userRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    setUser(docSnap.data() as UserProfile);
+                }
+            });
+
+            // Real-time media listener
+            const q = query(collection(db, "media"), where("userId", "==", firebaseUser.uid));
+            const unsubMedia = onSnapshot(q, (snapshot) => {
+                const items: MediaItem[] = [];
+                snapshot.forEach((doc) => {
+                    items.push({ ...doc.data(), id: doc.id } as MediaItem);
+                });
+                // Sort by date desc
+                setMediaItems(items.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            });
+
+            setLoadingUser(false);
+            return () => {
+                unsubUser();
+                unsubMedia();
+            };
         } else {
             setUser(null);
             setMediaItems([]);
+            setLoadingUser(false);
         }
-        setInitializing(false);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
 
-  const fetchUserMedia = async (userId: string) => {
-      try {
-          const q = query(collection(db, "media"), where("userId", "==", userId));
-          const querySnapshot = await getDocs(q);
-          const items: MediaItem[] = [];
-          querySnapshot.forEach((doc) => {
-              items.push(doc.data() as MediaItem);
-          });
-          // Sort by date newest
-          setMediaItems(items.sort((a,b) => Number(b.id) - Number(a.id)));
-      } catch (e) {
-          console.error("Error fetching media", e);
-      }
-  };
-
   const handleLogin = (newUser: UserProfile) => {
-    setUser(newUser);
-    fetchUserMedia(newUser.id);
-  };
-
-  const handleUpdateUser = (updatedUser: UserProfile) => {
-    setUser(updatedUser);
-    // Profile updates are handled inside Profile.tsx direct to Firestore, 
-    // but we update local state here to reflect immediately
+    setUser(newUser); // Optimistic
   };
 
   const handleLogout = async () => {
@@ -112,40 +100,33 @@ const App: React.FC = () => {
     setCurrentTab('dashboard');
   };
 
-  const handleAddMedia = (newItem: MediaItem) => {
-      // Optimistic update
-      setMediaItems([newItem, ...mediaItems]);
-      setCurrentTab('gallery');
-  };
-
   const renderContent = () => {
     if (!user) return null;
 
-    // Admin Routing
     if (user.role === 'admin') {
         return <AdminDashboard onLogout={handleLogout} />;
     }
 
-    // Athlete Routing
+    // Pass mediaItems to Home for analytics if needed
     switch (currentTab) {
       case 'dashboard':
-        return <Home user={user} />;
+        return <Home user={user} mediaItems={mediaItems} onNavigate={setCurrentTab} />;
       case 'gallery':
         return <Search mediaItems={mediaItems} />;
       case 'upload':
-        return <Upload onNavigate={setCurrentTab} onAddMedia={handleAddMedia} />;
+        return <Upload onNavigate={setCurrentTab} onAddMedia={() => {}} />; // AddMedia handled by firestore listener
       case 'inbox':
         return <Activity />;
       case 'profile':
-        return <Profile user={user} onUpdateUser={handleUpdateUser} />;
+        return <Profile user={user} onUpdateUser={() => {}} />;
       case 'settings':
         return <Settings user={user} onLogout={handleLogout} />;
       default:
-        return <Home user={user} />;
+        return <Home user={user} mediaItems={mediaItems} onNavigate={setCurrentTab} />;
     }
   };
 
-  if (showSplash || initializing) {
+  if (showSplash || loadingUser) {
       return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
@@ -153,40 +134,57 @@ const App: React.FC = () => {
       return <Auth onLogin={handleLogin} />;
   }
 
-  // If Admin, render full screen dashboard without bottom nav
   if (user.role === 'admin') {
       return renderContent();
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex justify-center font-sans">
-      <div className="w-full max-w-md bg-white min-h-screen flex flex-col relative shadow-2xl shadow-slate-200 overflow-hidden ring-1 ring-slate-900/5">
+    <div className="min-h-screen bg-slate-950 flex justify-center font-sans selection:bg-blue-500/30">
+      <div className="w-full max-w-md bg-slate-50 min-h-screen flex flex-col relative shadow-2xl shadow-black overflow-hidden">
         
-        {/* Header - Dashboard Only */}
+        {/* Dynamic Header */}
+        <AnimatePresence mode="wait">
         {currentTab === 'dashboard' && (
-            <div className="px-6 h-24 glass-nav sticky top-0 z-30 flex justify-between items-center transition-all duration-300">
+            <motion.div 
+                initial={{ y: -50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -50, opacity: 0 }}
+                className="px-6 h-20 glass-nav sticky top-0 z-30 flex justify-between items-center"
+            >
                 <div className="flex items-center">
                     <img 
                         src="https://www.goverum.com/wp-content/uploads/2025/12/verum-international-football-academy-bk-logo.png" 
-                        alt="Verum Academy" 
-                        className="h-12 w-auto object-contain" 
+                        alt="Verum" 
+                        className="h-10 w-auto object-contain" 
                     />
                 </div>
-                <div className="relative cursor-pointer hover:scale-105 transition-transform group" onClick={() => setCurrentTab('profile')}>
-                    <div className="w-11 h-11 rounded-full bg-white p-0.5 border-2 border-slate-100 shadow-sm overflow-hidden group-hover:border-slate-300 transition-colors flex items-center justify-center">
+                <div onClick={() => setCurrentTab('profile')} className="relative cursor-pointer">
+                    <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-300 overflow-hidden">
                         {user.avatarUrl ? (
-                            <img src={user.avatarUrl} className="w-full h-full rounded-full object-cover" />
+                            <img src={user.avatarUrl} className="w-full h-full object-cover" />
                         ) : (
-                            <span className="font-bold text-slate-900">{user.fullName.charAt(0)}</span>
+                            <div className="w-full h-full flex items-center justify-center bg-slate-900 text-white font-bold">{user.fullName[0]}</div>
                         )}
                     </div>
-                    <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-[3px] border-white rounded-full"></div>
                 </div>
-            </div>
+            </motion.div>
         )}
+        </AnimatePresence>
 
-        <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/50">
-          {renderContent()}
+        {/* Main Content Area with Transitions */}
+        <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/50 relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+                key={currentTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="h-full"
+            >
+                {renderContent()}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         <Navigation currentTab={currentTab} onTabChange={setCurrentTab} />
