@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Heart, MessageCircle, Share2, Calendar, Clock, TrendingUp, MoreVertical, Volume2, VolumeX, Send, X } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Calendar, Clock, TrendingUp, MoreVertical, Volume2, VolumeX, Send, X, Shield } from 'lucide-react';
 import { UserProfile, MediaItem, MatchEvent, Comment } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, addDoc, getDocs, where } from 'firebase/firestore';
@@ -25,7 +25,9 @@ const getTimeAgo = (dateString: string | undefined) => {
 
         const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
 
-        if (diffInSeconds < 60) return 'Just now';
+        // Handle negative diffs (timezone issues) by treating as "Just now"
+        if (diffInSeconds < 30) return 'Just now'; 
+        
         if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
         if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
         if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
@@ -73,13 +75,6 @@ const CommentsSheet: React.FC<{ mediaId: string; user: UserProfile; onClose: () 
                 authorName: user.fullName,
                 authorAvatar: user.avatarUrl
             });
-            
-            // Update comment count on media item (Optional: Cloud Function is better for this, but client-side works for MVP)
-            const mediaRef = doc(db, "media", mediaId);
-            // We can't easily increment without knowing current count reliably without a transaction, 
-            // but for UI feedback we rely on the realtime listener of the feed.
-            // A simple updateDoc to trigger a change event:
-             /* await updateDoc(mediaRef, { lastCommentAt: new Date().toISOString() }); */
         } catch (e) {
             console.error("Failed to comment", e);
         }
@@ -204,10 +199,17 @@ const FeedCard: React.FC<{ item: MediaItem; user: UserProfile; onLike: (id: stri
                     </div>
                     <div>
                         <h3 className="font-extrabold text-slate-900 text-sm leading-tight">{item.authorName || "Athlete"}</h3>
-                        <div className="flex items-center text-[10px] text-slate-400 font-bold mt-0.5 space-x-1">
-                            <span>{getTimeAgo(item.date)}</span>
-                            <span>•</span>
-                            <span className="text-blue-600">{item.category}</span>
+                        <div className="flex flex-col mt-0.5">
+                             {item.authorClub && (
+                                 <span className="text-[10px] font-bold text-slate-500 flex items-center mb-0.5">
+                                     <Shield size={10} className="mr-1 text-slate-400" /> {item.authorClub}
+                                 </span>
+                             )}
+                             <div className="flex items-center text-[10px] text-slate-400 font-bold space-x-1">
+                                <span>{getTimeAgo(item.date)}</span>
+                                <span>•</span>
+                                <span className="text-blue-600 uppercase">{item.category}</span>
+                            </div>
                         </div>
                     </div>
                 </div>

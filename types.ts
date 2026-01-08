@@ -17,6 +17,7 @@ export interface MediaItem {
 
   // Social Fields
   authorName?: string;
+  authorClub?: string; // NEW: Added Club
   authorAvatar?: string;
   likes?: string[]; // Array of User IDs
   commentsCount?: number;

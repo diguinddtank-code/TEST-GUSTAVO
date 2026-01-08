@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Video, Image as ImageIcon, Check, ChevronRight, UploadCloud, X, Loader2, ArrowRight, Trash2, Play } from 'lucide-react';
 import { MediaItem } from '../types';
@@ -23,7 +24,7 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch current user details to embed in post
-  const [currentUserInfo, setCurrentUserInfo] = useState<{name: string, avatar: string}>({name: '', avatar: ''});
+  const [currentUserInfo, setCurrentUserInfo] = useState<{name: string, avatar: string, club: string}>({name: '', avatar: '', club: ''});
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -33,7 +34,8 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
                 const d = snap.data();
                 setCurrentUserInfo({
                     name: d.fullName || 'Athlete',
-                    avatar: d.avatarUrl || ''
+                    avatar: d.avatarUrl || '',
+                    club: d.club || ''
                 });
             }
         }
@@ -91,6 +93,7 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
             
             // Social Fields
             authorName: currentUserInfo.name,
+            authorClub: currentUserInfo.club, // Save the club!
             authorAvatar: currentUserInfo.avatar,
             likes: [],
             commentsCount: 0
