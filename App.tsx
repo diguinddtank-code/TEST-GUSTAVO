@@ -3,12 +3,12 @@ import { Navigation } from './components/Navigation';
 import { Home } from './pages/Home';
 import { Upload } from './pages/Upload';
 import { Profile } from './pages/Profile';
-import { Search } from './pages/Search'; 
+import { Network } from './pages/Network'; // Import Network
 import { Activity } from './pages/Activity'; 
 import { Auth } from './pages/Auth';
 import { Settings } from './pages/Settings';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { ErrorBoundary } from './components/ErrorBoundary'; // Import ErrorBoundary
+import { ErrorBoundary } from './components/ErrorBoundary'; 
 import { UserProfile, MediaItem } from './types';
 import { auth, db } from './firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -64,9 +64,6 @@ const AppContent: React.FC = () => {
                     try {
                         const data = docSnap.data();
                         
-                        // --- PARANOID MIGRATION LOGIC ---
-                        // Use optional chaining (?.) everywhere to prevent crashes during checks
-                        
                         let needsUpdate = false;
                         const safeStats = data?.stats || { matches: 0, goals: 0, assists: 0, minutesPlayed: 0, ratingAvg: 0 };
                         const safePhysical = data?.physical || { height: '-', weight: '-', foot: '-', age: '-' };
@@ -74,9 +71,12 @@ const AppContent: React.FC = () => {
                         const safeBio = data?.bio || 'Ready to work.';
                         const safePosition = data?.position || '-';
                         const safeClub = data?.club || '-';
+                        // Social Migration
+                        const safeFollowers = data?.followers || [];
+                        const safeFollowing = data?.following || [];
 
                         // Check if critical fields are missing
-                        if (!data?.stats || !data?.physical || !data?.role || !data?.bio) {
+                        if (!data?.stats || !data?.physical || !data?.role || !data?.bio || !data?.followers) {
                             needsUpdate = true;
                         }
 
@@ -91,26 +91,28 @@ const AppContent: React.FC = () => {
                             role: safeRole,
                             bio: safeBio,
                             physical: safePhysical,
-                            stats: safeStats
+                            stats: safeStats,
+                            followers: safeFollowers,
+                            following: safeFollowing
                         };
 
                         if (needsUpdate) {
-                            console.log("Migrating old account schema...");
+                            console.log("Migrating old account schema (Social Update)...");
                             updateDoc(userRef, { 
                                 stats: safeStats,
                                 physical: safePhysical,
                                 role: safeRole,
                                 bio: safeBio,
                                 position: safePosition,
-                                club: safeClub
+                                club: safeClub,
+                                followers: safeFollowers,
+                                following: safeFollowing
                             }).catch(e => console.error("Migration save failed", e));
                         }
 
                         setUser(cleanUser);
                     } catch (err) {
                         console.error("Critical error parsing user data", err);
-                        // If parsing fails, we might want to force logout via ErrorBoundary eventually
-                        // But for now, letting it bubble up or keeping user null might be safer
                     }
                 }
             });
@@ -159,13 +161,13 @@ const AppContent: React.FC = () => {
 
     switch (currentTab) {
       case 'dashboard':
+        // Home is now the Feed
         return <Home user={user} mediaItems={mediaItems} onNavigate={setCurrentTab} />;
-      case 'gallery':
-        return <Search mediaItems={mediaItems} />;
+      case 'network':
+        // New Network Tab
+        return <Network currentUser={user} onUpdateUser={setUser} />;
       case 'upload':
         return <Upload onNavigate={setCurrentTab} onAddMedia={() => {}} />; 
-      case 'inbox':
-        return <Activity />;
       case 'profile':
         return <Profile user={user} mediaItems={mediaItems} onUpdateUser={() => {}} />;
       case 'settings':
@@ -207,13 +209,15 @@ const AppContent: React.FC = () => {
                         className="h-10 w-auto object-contain" 
                     />
                 </div>
-                <div onClick={() => setCurrentTab('profile')} className="relative cursor-pointer">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-300 overflow-hidden">
-                        {user.avatarUrl ? (
-                            <img src={user.avatarUrl} className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-slate-900 text-white font-bold">{user.fullName[0]}</div>
-                        )}
+                <div className="flex items-center space-x-3">
+                    <div onClick={() => setCurrentTab('profile')} className="relative cursor-pointer">
+                        <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-300 overflow-hidden">
+                            {user.avatarUrl ? (
+                                <img src={user.avatarUrl} className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-slate-900 text-white font-bold">{user.fullName[0]}</div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </motion.div>
@@ -221,7 +225,7 @@ const AppContent: React.FC = () => {
         </AnimatePresence>
 
         {/* Main Content Area with Transitions */}
-        <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/50 relative">
+        <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50 relative">
           <AnimatePresence mode="wait">
             <motion.div
                 key={currentTab}

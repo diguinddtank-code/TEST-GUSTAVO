@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Video, Image as ImageIcon, Check, ChevronRight, UploadCloud, X, Loader2, ArrowRight, Trash2, Play } from 'lucide-react';
 import { MediaItem } from '../types';
 import { auth, db } from '../firebaseConfig';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
 
 interface UploadProps {
   onNavigate: (tab: string) => void;
@@ -21,6 +21,25 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch current user details to embed in post
+  const [currentUserInfo, setCurrentUserInfo] = useState<{name: string, avatar: string}>({name: '', avatar: ''});
+
+  useEffect(() => {
+    const fetchUser = async () => {
+        if(auth.currentUser) {
+            const snap = await getDoc(doc(db, "users", auth.currentUser.uid));
+            if(snap.exists()) {
+                const d = snap.data();
+                setCurrentUserInfo({
+                    name: d.fullName || 'Athlete',
+                    avatar: d.avatarUrl || ''
+                });
+            }
+        }
+    }
+    fetchUser();
+  }, []);
 
   const handleTypeSelect = (type: 'video' | 'photo') => {
       setSelectedType(type);
@@ -60,15 +79,21 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
     
     try {
         const newItem: MediaItem = {
-            id: Date.now().toString(), // Will be overwritten by Firestore ID in real app, but useful for optimistic UI
+            id: Date.now().toString(), // Will be overwritten by Firestore ID
             userId: auth.currentUser.uid,
             type: selectedType,
             title: title,
             category: category as any,
-            date: new Date().toLocaleDateString(),
+            date: new Date().toISOString(), // Use ISO for better sorting in feed
             status: 'pending', 
             thumbnailUrl: fileUrl, 
-            duration: selectedType === 'video' ? '00:00' : undefined 
+            duration: selectedType === 'video' ? '00:00' : undefined,
+            
+            // Social Fields
+            authorName: currentUserInfo.name,
+            authorAvatar: currentUserInfo.avatar,
+            likes: [],
+            commentsCount: 0
         };
 
         // Save to Firestore 'media' collection
@@ -77,6 +102,7 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
         onAddMedia(newItem);
         setIsSubmitting(false);
         handleReset();
+        onNavigate('dashboard'); // Redirect to Feed
 
     } catch (e) {
         console.error("Error uploading media", e);
@@ -98,7 +124,7 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
     <div className="pb-32 pt-6 px-6 animate-in slide-in-from-bottom-8 duration-500 h-full flex flex-col">
       
       <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Upload Media</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">New Post</h1>
           {step === 2 && (
               <button onClick={() => setStep(1)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
                   <X size={16} />
@@ -109,8 +135,8 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
       {step === 1 ? (
         <div className="flex-1 flex flex-col space-y-4">
             <div className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm mb-4">
-                <h2 className="text-lg font-bold text-slate-900 mb-1">Share your progress</h2>
-                <p className="text-sm text-slate-500">Upload high quality clips for coach review.</p>
+                <h2 className="text-lg font-bold text-slate-900 mb-1">Share with the Community</h2>
+                <p className="text-sm text-slate-500">Upload your best moments to the global feed.</p>
             </div>
 
             <button onClick={() => handleTypeSelect('video')} className="relative overflow-hidden bg-blue-600 text-white rounded-3xl p-6 text-left shadow-xl shadow-blue-600/20 hover:scale-[1.02] transition-all group">
@@ -122,8 +148,8 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
                         <div className="bg-white/20 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-sm">
                             <Video size={24} className="text-white" />
                         </div>
-                        <h3 className="text-lg font-extrabold">Highlights</h3>
-                        <p className="text-blue-100 text-xs mt-1 font-medium">Goals, Assists, Skills</p>
+                        <h3 className="text-lg font-extrabold">Video Clip</h3>
+                        <p className="text-blue-100 text-xs mt-1 font-medium">Goals, Skills, Highlights</p>
                     </div>
                     <ChevronRight className="opacity-0 group-hover:opacity-100 transition-opacity transform -translate-x-2 group-hover:translate-x-0" />
                 </div>
@@ -138,7 +164,7 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
                         <div className="bg-slate-100 w-12 h-12 rounded-2xl flex items-center justify-center mb-4">
                             <ImageIcon size={24} className="text-slate-600" />
                         </div>
-                        <h3 className="text-lg font-extrabold">Photos</h3>
+                        <h3 className="text-lg font-extrabold">Photo</h3>
                         <p className="text-slate-500 text-xs mt-1 font-medium">Matchday, Team Events</p>
                     </div>
                     <ChevronRight className="text-slate-300 group-hover:text-slate-600 transition-colors" />
@@ -196,13 +222,13 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
 
              <div className="space-y-4">
                 <div>
-                    <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-2">Title</label>
+                    <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-2">Caption</label>
                     <input 
                         type="text" 
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         className="w-full p-4 bg-white rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-semibold transition-all shadow-sm"
-                        placeholder={selectedType === 'video' ? "e.g. Goal vs Santos" : "e.g. Team Celebration"}
+                        placeholder={selectedType === 'video' ? "What a goal! #matchday" : "Great session today"}
                     />
                 </div>
 
@@ -239,11 +265,11 @@ export const Upload: React.FC<UploadProps> = ({ onNavigate, onAddMedia }) => {
                     {isSubmitting ? (
                         <>
                             <Loader2 size={20} className="animate-spin" />
-                            <span>Uploading...</span>
+                            <span>Posting...</span>
                         </>
                     ) : (
                         <>
-                            <span>Submit for Review</span>
+                            <span>Share Post</span>
                             <Check size={20} strokeWidth={3} />
                         </>
                     )}

@@ -1,3 +1,4 @@
+
 export interface MediaItem {
   id: string;
   userId: string;
@@ -13,6 +14,12 @@ export interface MediaItem {
   coachRating?: number; // 0-10
   coachFeedback?: string;
   views?: number;
+
+  // Social Fields
+  authorName?: string;
+  authorAvatar?: string;
+  likes?: string[]; // Array of User IDs
+  commentsCount?: number;
 }
 
 export interface Announcement {
@@ -72,8 +79,11 @@ export interface UserProfile {
     goals: number;
     assists: number;
     minutesPlayed?: number;
-    ratingAvg?: number; // Calculated from media ratings
+    ratingAvg?: number; 
   };
+  // Social Graph
+  followers?: string[];
+  following?: string[];
 }
 
 export interface Notification {
@@ -82,6 +92,6 @@ export interface Notification {
   message: string;
   time: string;
   read: boolean;
-  type: 'feedback' | 'system' | 'alert';
+  type: 'feedback' | 'system' | 'alert' | 'social';
   linkToMediaId?: string; // Deep link to content
 }
